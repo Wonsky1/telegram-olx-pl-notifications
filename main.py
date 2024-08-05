@@ -111,7 +111,7 @@ def is_time_within_last_6_minutes(time_str: str) -> bool:
 async def get_new_flats() -> Union[List[Flat], None]:
     print(f"Getting new flats at {datetime.now().strftime('%H:%M')}")
     result = []
-    url = "https://www.olx.pl/nieruchomosci/mieszkania/wynajem/warszawa/?search%5Bprivate_business%5D=private&search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=2500&search%5Bfilter_enum_rooms%5D%5B0%5D=one"
+    url = os.getenv("URL", "https://www.olx.pl/nieruchomosci/mieszkania/wynajem/warszawa/?search%5Bprivate_business%5D=private&search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=2500&search%5Bfilter_enum_rooms%5D%5B0%5D=one")
     headers = {
         # ":authority": "www.olx.pl",
         # ":method": "GET",
