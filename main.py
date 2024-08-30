@@ -13,7 +13,7 @@ from bs4 import BeautifulSoup
 from transformers import pipeline
 
 
-pipe = pipeline("text-generation", model="ghost-x/ghost-8b-beta-1608")
+pipe = pipeline("text-generation", model="eryk-mazus/polka-1.1b-chat")
 
 load_dotenv()
 PROXY_URL = "http://proxy.server:3128"
