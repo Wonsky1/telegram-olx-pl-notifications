@@ -11,6 +11,10 @@ import requests
 from bs4 import BeautifulSoup
 import socket
 import requests.packages.urllib3.util.connection as urllib3_cn
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 def allowed_gai_family():
@@ -74,9 +78,8 @@ async def send_flats_message(chat_id: Union[int,str], flats: List[Flat]):
 async def send_periodic_message(chat_id: int):
     while True:
         flats = await get_new_flats()
-        print(f"Sending {len(flats)} flats to {chat_id}")
+        logging.info(f"Sending {len(flats)} flats to {chat_id}")
         await send_flats_message(chat_id, flats)
-        # await bot.send
         await asyncio.sleep(SLEEP_MINUTES * 60)
 
 
@@ -109,7 +112,7 @@ def is_time_within_last_6_minutes(time_str: str) -> bool:
     try:
         time_provided = datetime.strptime(time_str, time_format).time()
     except ValueError:
-        print(f"Invalid time format: {time_str}")
+        logging.error(f"Invalid time format: {time_str}")
         return False
 
     now = datetime.now() - timedelta(hours=2)
@@ -119,8 +122,9 @@ def is_time_within_last_6_minutes(time_str: str) -> bool:
 
     return time_provided >= six_minutes_ago
 
+
 async def get_new_flats() -> Union[List[Flat], None]:
-    print(f"Getting new flats at {datetime.now().strftime('%H:%M')}")
+    logging.info(f"Getting new flats at {datetime.now().strftime('%H:%M')}")
     result = []
     url = os.getenv("URL", "https://www.olx.pl/nieruchomosci/mieszkania/wynajem/warszawa/?search%5Bprivate_business%5D=private&search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=2500&search%5Bfilter_enum_rooms%5D%5B0%5D=one")
     headers = {
@@ -131,10 +135,8 @@ async def get_new_flats() -> Union[List[Flat], None]:
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
     }
     response = requests.get(url, headers=headers)
-    print(response.status_code)
+    logging.info(response.status_code)
     soup = BeautifulSoup(response.text, 'html.parser')
-    # with open("index.html", 'w', encoding='utf-8') as file:
-    #     file.write(soup.prettify())
     divs = soup.find_all('div', attrs={'data-testid': "l-card"})
     for div in divs:
         location_date = div.find('p', attrs={'data-testid': 'location-date'}).get_text(strip=True)
@@ -166,7 +168,6 @@ async def get_new_flats() -> Union[List[Flat], None]:
         flat_url = "https://www.olx.pl" + flat_url
         title = title.get_text(strip=True)
 
-        # flat_url = div.find('div', attrs={'data-cy': 'ad-card-url'})
         time_provided = datetime.strptime(time, "%H:%M").time()
         date_placeholder = datetime(2000, 1, 1)  # Date doesn't matter here
         datetime_provided = datetime.combine(date_placeholder, time_provided)
@@ -182,7 +183,7 @@ async def get_new_flats() -> Union[List[Flat], None]:
             image_url=image_url,
             flat_url=flat_url
         ))
-    print(f"Found {len(result)} flats")
+    logging.info(f"Found {len(result)} flats")
     return result
 
 async def main() -> None:
