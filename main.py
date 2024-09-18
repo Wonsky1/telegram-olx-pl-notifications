@@ -9,6 +9,15 @@ from aiogram.types import Message
 from dotenv import load_dotenv
 import requests
 from bs4 import BeautifulSoup
+import socket
+import requests.packages.urllib3.util.connection as urllib3_cn
+
+
+def allowed_gai_family():
+    return socket.AF_INET
+
+
+urllib3_cn.allowed_gai_family = allowed_gai_family
 
 
 load_dotenv()
