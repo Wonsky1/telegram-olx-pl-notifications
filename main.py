@@ -116,7 +116,18 @@ async def end_monitoring(message: Message):
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
-    await message.answer("Hello Yana, this is a bot for you <3")
+    kb = [
+        [
+            types.KeyboardButton(text="/start_monitoring"),
+            types.KeyboardButton(text="/end_monitoring"),
+        ],
+    ]
+    keyboard = types.ReplyKeyboardMarkup(
+        keyboard=kb,
+        resize_keyboard=True,
+        input_field_placeholder="Start or stop monitoring",
+    )
+    await message.answer("Hello Yana, this is a bot for you <3", reply_markup=keyboard)
 
 
 def is_time_within_last_6_minutes(time_str: str) -> bool:
