@@ -2,6 +2,7 @@ import asyncio
 from datetime import datetime, timedelta
 import os
 from typing import List, Union
+import validators
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command, CommandStart
@@ -146,9 +147,27 @@ def is_time_within_last_6_minutes(time_str: str) -> bool:
     return time_provided >= six_minutes_ago
 
 
+def is_valid_and_accessible(url: str) -> bool:
+    """Check if a URL is valid and returns a successful response."""
+    if not validators.url(url):
+        return False
+
+    try:
+        response = requests.get(url)
+        return response.status_code == 200
+    except requests.RequestException:
+        return False
+
+
+def get_valid_url(url: str, fallback_url: str) -> str:
+    """Return the provided URL if valid and accessible, otherwise return the fallback URL."""
+    return url if is_valid_and_accessible(url) else fallback_url
+
+
 async def get_new_flats(
     url: str = URL
 ) -> Union[List[Flat], None]:
+    url = get_valid_url(url, URL)
     logging.info(f"Getting new flats at {datetime.now().strftime('%H:%M')}")
     result = []
     headers = {
