@@ -13,7 +13,6 @@ import socket
 import requests.packages.urllib3.util.connection as urllib3_cn
 import logging
 
-# Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
@@ -34,6 +33,10 @@ tasks = {}
 
 LAST_MINUTES_GETTING = 75
 SLEEP_MINUTES = 60
+URL = os.getenv(
+    "URL",
+    "https://www.olx.pl/nieruchomosci/mieszkania/wynajem/warszawa/?search%5Bprivate_business%5D=private&search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=2500&search%5Bfilter_enum_rooms%5D%5B0%5D=one"
+)
 
 
 class Flat:
@@ -45,6 +48,13 @@ class Flat:
         self.location = location
         self.flat_url = flat_url
 
+
+def get_link(text: str) -> str or None:
+    try:
+        link = text.split(" ")[1]
+        return link
+    except Exception:
+        return None
 
 async def send_flats_message(chat_id: Union[int,str], flats: List[Flat]):
     if flats:
@@ -75,9 +85,9 @@ async def send_flats_message(chat_id: Union[int,str], flats: List[Flat]):
                     text=text
                 )
 
-async def send_periodic_message(chat_id: int):
+async def send_periodic_message(chat_id: int, url: str):
     while True:
-        flats = await get_new_flats()
+        flats = await get_new_flats(url=url)
         logging.info(f"Sending {len(flats)} flats to {chat_id}")
         await send_flats_message(chat_id, flats)
         await asyncio.sleep(SLEEP_MINUTES * 60)
@@ -85,9 +95,11 @@ async def send_periodic_message(chat_id: int):
 
 @dp.message(Command(commands=['start_monitoring']))
 async def start_monitoring(message: Message):
+
     chat_id = message.chat.id
+    url = get_link(message.text)
     if chat_id not in tasks:
-        tasks[chat_id] = asyncio.create_task(send_periodic_message(chat_id))
+        tasks[chat_id] = asyncio.create_task(send_periodic_message(chat_id=chat_id, url=url if url else URL))
         await message.answer("Starting monitoring")
     else:
         await message.answer("Monitoring is already started")
@@ -123,10 +135,11 @@ def is_time_within_last_6_minutes(time_str: str) -> bool:
     return time_provided >= six_minutes_ago
 
 
-async def get_new_flats() -> Union[List[Flat], None]:
+async def get_new_flats(
+    url: str = URL
+) -> Union[List[Flat], None]:
     logging.info(f"Getting new flats at {datetime.now().strftime('%H:%M')}")
     result = []
-    url = os.getenv("URL", "https://www.olx.pl/nieruchomosci/mieszkania/wynajem/warszawa/?search%5Bprivate_business%5D=private&search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=2500&search%5Bfilter_enum_rooms%5D%5B0%5D=one")
     headers = {
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
         "Accept-Encoding": "gzip, deflate, br, zstd",
