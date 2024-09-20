@@ -14,9 +14,28 @@ from bs4 import BeautifulSoup
 import socket
 import requests.packages.urllib3.util.connection as urllib3_cn
 import logging
+from database import get_db, create_task, get_task_by_chat_id, delete_task_by_chat_id, get_all_tasks, init_db
 
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+init_db()
+
+db = next(get_db())
+
+
+async def recreate_tasks():
+    """Recreate monitoring tasks from the database after bot restart."""
+    tasks_from_db = get_all_tasks(db)
+
+    for task in tasks_from_db:
+        chat_id = int(task.chat_id)
+        url = task.url
+        last_updated = task.last_updated
+
+        # Recreate the asyncio task
+        tasks[chat_id] = asyncio.create_task(send_periodic_message(chat_id=chat_id, url=url, start_time=last_updated + timedelta(hours=1)))
+        logging.info(f"Recreated monitoring task for chat_id {chat_id}")
 
 
 def allowed_gai_family():
@@ -88,12 +107,15 @@ async def send_flats_message(chat_id: Union[int,str], flats: List[Flat]):
                     text=text
                 )
 
-async def send_periodic_message(chat_id: int, url: str):
-    while True:
-        flats = await get_new_flats(url=url)
-        logging.info(f"Sending {len(flats)} flats to {chat_id}")
-        await send_flats_message(chat_id, flats)
-        await asyncio.sleep(SLEEP_MINUTES * 60)
+async def send_periodic_message(chat_id: int, url: str, start_time: datetime = None):
+        while True:
+            if start_time is None or start_time <= datetime.now():
+                flats = await get_new_flats(url=url)
+                logging.info(f"Sending {len(flats)} flats to {chat_id}")
+                await send_flats_message(chat_id, flats)
+                await asyncio.sleep(SLEEP_MINUTES * 60)
+            else:
+                await asyncio.sleep(60)
 
 
 @dp.message(Command(commands=['start_monitoring']))
@@ -101,7 +123,10 @@ async def start_monitoring(message: Message):
 
     chat_id = message.chat.id
     url = get_link(message.text)
-    if chat_id not in tasks:
+    task = get_task_by_chat_id(db, str(chat_id))
+    if not task:
+        create_task(db, chat_id=str(chat_id), url=url if url else URL)
+
         tasks[chat_id] = asyncio.create_task(send_periodic_message(chat_id=chat_id, url=url if url else URL))
         await message.answer("Starting monitoring")
     else:
@@ -109,13 +134,17 @@ async def start_monitoring(message: Message):
 
 @dp.message(lambda message: message.text and message.text.lower() == '/end_monitoring')
 async def end_monitoring(message: Message):
-    chat_id = message.chat.id
-    if chat_id in tasks:
-        tasks[chat_id].cancel()
-        del tasks[chat_id]
+    chat_id = str(message.chat.id)
+    task = get_task_by_chat_id(db, chat_id)
+    if task:
+        delete_task_by_chat_id(db, chat_id)
+        if chat_id in tasks:
+            tasks[chat_id].cancel()
+            del tasks[chat_id]
         await message.answer("Monitoring stopped")
     else:
         await message.answer("Monitoring is already stopped")
+
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
@@ -194,7 +223,7 @@ async def get_new_flats(
         if location.endswith("-"):
             location = location[:-1]
         is_within = is_time_within_last_6_minutes(time)
-        if not is_time_within_last_6_minutes(time):
+        if is_within:
             continue
 
         image_url = None
@@ -234,12 +263,13 @@ async def get_new_flats(
 
 async def main() -> None:
     chat_id = os.getenv("CHAT_IDS")
-
+    await recreate_tasks()
     try:
         await bot.send_message(chat_id=chat_id, text="BOT WAS STARTED")
         while True:
             try:
                 await dp.start_polling(bot)
+
             except TelegramNetworkError as e:
                 logging.error(f"Failed to fetch updates - TelegramNetworkError: {e}")
                 await asyncio.sleep(1)  # Sleep before retrying
