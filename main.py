@@ -5,6 +5,7 @@ from typing import List, Union
 import validators
 
 from aiogram import Bot, Dispatcher, types
+from aiogram.exceptions import TelegramNetworkError, TelegramServerError
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
 from dotenv import load_dotenv
@@ -13,6 +14,7 @@ from bs4 import BeautifulSoup
 import socket
 import requests.packages.urllib3.util.connection as urllib3_cn
 import logging
+
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -229,12 +231,27 @@ async def get_new_flats(
     logging.info(f"Found {len(result)} flats")
     return result
 
+
 async def main() -> None:
+    chat_id = os.getenv("CHAT_IDS")
+
     try:
-        await bot.send_message(chat_id=os.getenv("CHAT_IDS"), text="BOT WAS STARTED")
-        await dp.start_polling(bot)
+        await bot.send_message(chat_id=chat_id, text="BOT WAS STARTED")
+        while True:
+            try:
+                await dp.start_polling(bot)
+            except TelegramNetworkError as e:
+                logging.error(f"Failed to fetch updates - TelegramNetworkError: {e}")
+                await asyncio.sleep(1)  # Sleep before retrying
+            except TelegramServerError as e:
+                logging.error(f"Failed to fetch updates - TelegramServerError: {e}")
+                await asyncio.sleep(1)  # Sleep before retrying
+            except Exception as e:
+                logging.error(f"An unexpected error occurred: {e}")
+                await asyncio.sleep(1)  # Sleep before retrying
+
     finally:
-        await bot.send_message(chat_id=os.getenv("CHAT_IDS"), text="BOT WAS STOPPED")
+        await bot.send_message(chat_id=chat_id, text="BOT WAS STOPPED")
         await bot.session.close()
 
 if __name__ == "__main__":
