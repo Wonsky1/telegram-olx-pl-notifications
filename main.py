@@ -78,6 +78,7 @@ def get_link(text: str) -> str or None:
     except Exception:
         return None
 
+
 async def send_flats_message(chat_id: Union[int,str], flats: List[Flat]):
     if flats:
         await bot.send_photo(
@@ -107,6 +108,7 @@ async def send_flats_message(chat_id: Union[int,str], flats: List[Flat]):
                     text=text
                 )
 
+
 async def send_periodic_message(chat_id: int, url: str, start_time: datetime = None):
         while True:
             if start_time is None or start_time <= datetime.now():
@@ -131,6 +133,7 @@ async def start_monitoring(message: Message):
         await message.answer("Starting monitoring")
     else:
         await message.answer("Monitoring is already started")
+
 
 @dp.message(lambda message: message.text and message.text.lower() == '/end_monitoring')
 async def end_monitoring(message: Message):
@@ -170,7 +173,7 @@ def is_time_within_last_6_minutes(time_str: str) -> bool:
         logging.error(f"Invalid time format: {time_str}")
         return False
 
-    now = datetime.now() - timedelta(hours=2)
+    now = datetime.now()
     current_time = now.time()
 
     six_minutes_ago = (datetime.combine(now.date(), current_time) - timedelta(minutes=LAST_MINUTES_GETTING)).time()
@@ -223,7 +226,7 @@ async def get_new_flats(
         if location.endswith("-"):
             location = location[:-1]
         is_within = is_time_within_last_6_minutes(time)
-        if is_within:
+        if not is_within:
             continue
 
         image_url = None
