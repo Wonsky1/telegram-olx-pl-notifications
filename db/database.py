@@ -1,8 +1,11 @@
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import List, Tuple
 
 from sqlalchemy import create_engine, Column, Integer, String, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+
+from core.config import settings
 
 DATABASE_URL = "sqlite:///monitoring.db"
 
@@ -57,3 +60,15 @@ def delete_task_by_chat_id(db, chat_id: str):
 def get_all_tasks(db):
     """Get all monitoring tasks from the database."""
     return db.query(MonitoringTask).all()
+
+
+def get_users_pending(db) -> List[Tuple[str, str]]:
+    """
+    Retrieve chat_ids and their associated urls for tasks where
+    the last_updated field is older than the threshold defined in settings.TIME.
+    """
+    time_threshold = datetime.now() - timedelta(seconds=settings.SLEEP_MINUTES)
+    tasks = db.query(MonitoringTask.chat_id, MonitoringTask.url).filter(
+        MonitoringTask.last_updated < time_threshold
+    ).all()
+    return tasks
