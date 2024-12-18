@@ -15,10 +15,14 @@ def get_link(text: str) -> str or None:
         return None
 
 
-def is_time_within_last_n_minutes(time_str: str, n: int = settings.LAST_MINUTES_GETTING) -> bool:
-    time_format = '%H:%M'
+def is_time_within_last_n_minutes(
+    time_str: str, n: int = settings.LAST_MINUTES_GETTING
+) -> bool:
+    time_format = "%H:%M"
     try:
-        time_provided = (datetime.strptime(time_str, time_format) + timedelta(minutes=60)).time()
+        time_provided = (
+            datetime.strptime(time_str, time_format) + timedelta(minutes=60)
+        ).time()
     except ValueError:
         logging.error(f"Invalid time format: {time_str}")
         return False
@@ -27,7 +31,9 @@ def is_time_within_last_n_minutes(time_str: str, n: int = settings.LAST_MINUTES_
     current_time = now.time()
 
     # time_provided = (datetime.combine(now.date(), now.time())
-    n_minutes_ago = (datetime.combine(now.date(), current_time) - timedelta(minutes=n)).time()
+    n_minutes_ago = (
+        datetime.combine(now.date(), current_time) - timedelta(minutes=n)
+    ).time()
 
     return time_provided >= n_minutes_ago
 

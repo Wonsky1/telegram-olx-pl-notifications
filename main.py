@@ -12,9 +12,17 @@ from dotenv import load_dotenv
 import requests
 from bs4 import BeautifulSoup
 import socket
+
 # import requests.packages.urllib3.util.connection as urllib3_cn
 import logging
-from db.database import get_db, create_task, get_task_by_chat_id, delete_task_by_chat_id, get_all_tasks, init_db
+from db.database import (
+    get_db,
+    create_task,
+    get_task_by_chat_id,
+    delete_task_by_chat_id,
+    get_all_tasks,
+    init_db,
+)
 from tools.app_funcs import get_new_flats
 from tools.models import Flat
 from tools.utils import get_link, get_valid_url
@@ -26,7 +34,9 @@ from core.config import settings
 #
 # urllib3_cn.allowed_gai_family = allowed_gai_family
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 load_dotenv()
 
@@ -50,11 +60,15 @@ async def recreate_tasks():
         last_updated = task.last_updated
 
         # Recreate the asyncio task
-        tasks[chat_id] = asyncio.create_task(send_periodic_message(chat_id=chat_id, url=url, start_time=last_updated + timedelta(hours=1)))
+        tasks[chat_id] = asyncio.create_task(
+            send_periodic_message(
+                chat_id=chat_id, url=url, start_time=last_updated + timedelta(hours=1)
+            )
+        )
         logging.info(f"Recreated monitoring task for chat_id {chat_id}")
 
 
-async def send_flats_message(chat_id: Union[int,str], flats: List[Flat]):
+async def send_flats_message(chat_id: Union[int, str], flats: List[Flat]):
     if flats:
         await bot.send_photo(
             chat_id=chat_id,
@@ -73,15 +87,10 @@ async def send_flats_message(chat_id: Union[int,str], flats: List[Flat]):
                 flat.image_url = None
             if flat.image_url:
                 await bot.send_photo(
-                    chat_id=chat_id,
-                    photo=flat.image_url,
-                    caption=text
+                    chat_id=chat_id, photo=flat.image_url, caption=text
                 )
             else:
-                await bot.send_message(
-                    chat_id=chat_id,
-                    text=text
-                )
+                await bot.send_message(chat_id=chat_id, text=text)
 
 
 async def send_periodic_message(chat_id: int, url: str, start_time: datetime = None):
@@ -94,7 +103,8 @@ async def send_periodic_message(chat_id: int, url: str, start_time: datetime = N
         else:
             await asyncio.sleep(60)
 
-@dp.message(Command(commands=['start_monitoring']))
+
+@dp.message(Command(commands=["start_monitoring"]))
 async def start_monitoring(message: Message):
 
     chat_id = message.chat.id
@@ -103,13 +113,15 @@ async def start_monitoring(message: Message):
     if not task:
         create_task(db, chat_id=str(chat_id), url=url if url else settings.URL)
 
-        tasks[chat_id] = asyncio.create_task(send_periodic_message(chat_id=chat_id, url=url if url else settings.URL))
+        tasks[chat_id] = asyncio.create_task(
+            send_periodic_message(chat_id=chat_id, url=url if url else settings.URL)
+        )
         await message.answer("Starting monitoring")
     else:
         await message.answer("Monitoring is already started")
 
 
-@dp.message(lambda message: message.text and message.text.lower() == '/end_monitoring')
+@dp.message(lambda message: message.text and message.text.lower() == "/end_monitoring")
 async def end_monitoring(message: Message):
     chat_id = str(message.chat.id)
     task = get_task_by_chat_id(db, chat_id)
