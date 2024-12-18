@@ -1,16 +1,13 @@
 import asyncio
 import logging
 from datetime import datetime, timedelta
-from typing import Union, List
+from typing import List
 
 from core.config import settings
 from tools.models import Flat
 from tools.utils import get_valid_url, is_time_within_last_n_minutes
 import requests
 from bs4 import BeautifulSoup
-import socket
-
-# import requests.packages.urllib3.util.connection as urllib3_cn
 
 
 async def get_new_flats(url: str = settings.URL) -> List[Flat]:
@@ -55,7 +52,6 @@ async def get_new_flats(url: str = settings.URL) -> List[Flat]:
         title = div.find("div", attrs={"data-cy": "ad-card-title"})
         a_tag = title.find("a")
 
-        # Get the href attribute from the <a> tag
         flat_url = a_tag["href"]
         flat_url = "https://www.olx.pl" + flat_url
         title = title.get_text(strip=True)
