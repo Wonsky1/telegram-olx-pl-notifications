@@ -9,23 +9,20 @@ from aiogram.exceptions import TelegramNetworkError, TelegramServerError
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
 from dotenv import load_dotenv
-import requests
-from bs4 import BeautifulSoup
-import socket
+from aiogram.utils.chat_action import ChatActionSender
 
-# import requests.packages.urllib3.util.connection as urllib3_cn
 import logging
 from db.database import (
     get_db,
     create_task,
     get_task_by_chat_id,
     delete_task_by_chat_id,
-    get_all_tasks,
     init_db,
+    get_users_pending,
 )
 from tools.app_funcs import get_new_flats
 from tools.models import Flat
-from tools.utils import get_link, get_valid_url
+from tools.utils import get_link
 from core.config import settings
 
 # def allowed_gai_family():
@@ -33,12 +30,13 @@ from core.config import settings
 #
 #
 # urllib3_cn.allowed_gai_family = allowed_gai_family
+load_dotenv()
+
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-load_dotenv()
 
 bot = Bot(token=os.getenv("BOT_TOKEN"))
 dp = Dispatcher()
@@ -50,22 +48,8 @@ init_db()
 db = next(get_db())
 
 
-async def recreate_tasks():
-    """Recreate monitoring tasks from the database after bot restart."""
-    tasks_from_db = get_all_tasks(db)
-
-    for task in tasks_from_db:
-        chat_id = int(task.chat_id)
-        url = task.url
-        last_updated = task.last_updated
-
-        # Recreate the asyncio task
-        tasks[chat_id] = asyncio.create_task(
-            send_periodic_message(
-                chat_id=chat_id, url=url, start_time=last_updated + timedelta(hours=1)
-            )
-        )
-        logging.info(f"Recreated monitoring task for chat_id {chat_id}")
+async def on_startup():
+    asyncio.create_task(send_periodic_message())
 
 
 async def send_flats_message(chat_id: Union[int, str], flats: List[Flat]):
@@ -93,30 +77,40 @@ async def send_flats_message(chat_id: Union[int, str], flats: List[Flat]):
                 await bot.send_message(chat_id=chat_id, text=text)
 
 
-async def send_periodic_message(chat_id: int, url: str, start_time: datetime = None):
+async def send_messages(bot_, chat_id: Union[str, int], url: str):
+    async with ChatActionSender.typing(bot=bot_, chat_id=chat_id):
+        flats = await get_new_flats(url=url)
+
+        logging.info(f"Sending {len(flats)} flats to {chat_id}")
+        await send_flats_message(chat_id, flats)
+
+
+async def send_periodic_message():
     while True:
-        if start_time is None or start_time <= datetime.now():
-            flats = await get_new_flats(url=url)
-            logging.info(f"Sending {len(flats)} flats to {chat_id}")
-            await send_flats_message(chat_id, flats)
-            await asyncio.sleep(settings.SLEEP_MINUTES * 60)
-        else:
+        users = get_users_pending(db)
+        if not users:
             await asyncio.sleep(60)
+            continue
+
+        for chat_id, url in users:
+            await send_messages(bot, chat_id, url)
+
+            task = get_task_by_chat_id(db, chat_id)
+            if task:
+                task.last_updated = datetime.now()
+                db.commit()
 
 
 @dp.message(Command(commands=["start_monitoring"]))
 async def start_monitoring(message: Message):
-
     chat_id = message.chat.id
     url = get_link(message.text)
     task = get_task_by_chat_id(db, str(chat_id))
     if not task:
         create_task(db, chat_id=str(chat_id), url=url if url else settings.URL)
 
-        tasks[chat_id] = asyncio.create_task(
-            send_periodic_message(chat_id=chat_id, url=url if url else settings.URL)
-        )
         await message.answer("Starting monitoring")
+        await send_messages(bot, message.chat.id, url)
     else:
         await message.answer("Monitoring is already started")
 
@@ -152,23 +146,20 @@ async def cmd_start(message: types.Message):
 
 
 async def main() -> None:
-    chat_id = os.getenv("CHAT_IDS")
-    await recreate_tasks()
+    chat_id = settings.CHAT_IDS
     try:
         await bot.send_message(chat_id=chat_id, text="BOT WAS STARTED")
-        # while True:
         try:
+            dp.startup.register(on_startup)
             await dp.start_polling(bot)
 
         except TelegramNetworkError as e:
             logging.error(f"Failed to fetch updates - TelegramNetworkError: {e}")
-            await asyncio.sleep(1)  # Sleep before retrying
         except TelegramServerError as e:
             logging.error(f"Failed to fetch updates - TelegramServerError: {e}")
-            await asyncio.sleep(1)  # Sleep before retrying
+            await asyncio.sleep(1)
         except Exception as e:
             logging.error(f"An unexpected error occurred: {e}")
-            await asyncio.sleep(1)  # Sleep before retrying
 
     finally:
         await bot.send_message(chat_id=chat_id, text="BOT WAS STOPPED")
