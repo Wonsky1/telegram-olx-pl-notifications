@@ -3,9 +3,9 @@ from datetime import datetime, timedelta
 import os
 from typing import List, Union
 
-
 from aiogram import Bot, Dispatcher, types
 from aiogram.exceptions import TelegramNetworkError, TelegramServerError
+
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
 from dotenv import load_dotenv
@@ -39,9 +39,10 @@ logging.basicConfig(
 
 
 bot = Bot(token=os.getenv("BOT_TOKEN"))
-dp = Dispatcher()
 
+dp = Dispatcher()
 tasks = {}
+bot_task = None
 
 init_db()
 
@@ -50,7 +51,6 @@ db = next(get_db())
 
 async def on_startup():
     asyncio.create_task(send_periodic_message())
-
 
 async def send_flats_message(chat_id: Union[int, str], flats: List[Flat]):
     if flats:
@@ -85,6 +85,7 @@ async def send_messages(bot_, chat_id: Union[str, int], url: str):
         await send_flats_message(chat_id, flats)
 
 
+
 async def send_periodic_message():
     while True:
         users = get_users_pending(db)
@@ -116,6 +117,7 @@ async def start_monitoring(message: Message):
 
 
 @dp.message(lambda message: message.text and message.text.lower() == "/end_monitoring")
+
 async def end_monitoring(message: Message):
     chat_id = str(message.chat.id)
     task = get_task_by_chat_id(db, chat_id)
@@ -147,6 +149,7 @@ async def cmd_start(message: types.Message):
 
 async def main() -> None:
     chat_id = settings.CHAT_IDS
+
     try:
         await bot.send_message(chat_id=chat_id, text="BOT WAS STARTED")
         try:
@@ -168,3 +171,4 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
+
