@@ -67,7 +67,7 @@ def get_users_pending(db) -> List[Tuple[str, str]]:
     Retrieve chat_ids and their associated urls for tasks where
     the last_updated field is older than the threshold defined in settings.TIME.
     """
-    time_threshold = datetime.now() - timedelta(seconds=settings.SLEEP_MINUTES)
+    time_threshold = datetime.now() - timedelta(seconds=settings.SLEEP_MINUTES * 60)
     tasks = db.query(MonitoringTask.chat_id, MonitoringTask.url).filter(
         MonitoringTask.last_updated < time_threshold
     ).all()
