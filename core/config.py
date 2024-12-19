@@ -30,5 +30,7 @@ class Settings(BaseSettings):
     LAST_MINUTES_GETTING: int = 75
     SLEEP_MINUTES: int = 60
 
+    GPT_API_URL: str
+
 
 settings = Settings()
