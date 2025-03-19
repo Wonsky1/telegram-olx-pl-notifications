@@ -8,7 +8,6 @@ import requests
 
 from core.config import settings
 from prompts import get_description_summary_prompt
-from tools.prompts import summarizing_prompt
 
 
 def get_link(text: str) -> str | None:

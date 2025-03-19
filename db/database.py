@@ -21,6 +21,21 @@ class MonitoringTask(Base):
     chat_id = Column(String, unique=True, index=True)
     url = Column(String, nullable=False)
     last_updated = Column(DateTime, nullable=False)
+    last_got_flat = Column(DateTime, nullable=True)
+
+
+class FlatRecord(Base):
+    __tablename__ = "flat_records"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    flat_url = Column(String, unique=True, index=True)
+    title = Column(String)
+    price = Column(String)
+    location = Column(String)
+    created_at = Column(DateTime)
+    image_url = Column(String, nullable=True)
+    description = Column(String)
+    first_seen = Column(DateTime, default=datetime.now)
 
 
 def init_db():

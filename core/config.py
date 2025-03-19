@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     GROQ_API_KEY: Optional[str] = None
     GROQ_MODEL_NAME: Optional[str] = None
 
+    RABBITMQ_HOST: str
+    RABBITMQ_PORT: int
+
+    RABBITMQ_EXCHANGES: List[str] = ["flats"]
+    RABBITMQ_QUEUES: List[str] = ["pending"]
+
 
     GENERATIVE_MODEL: Optional[ChatGroq] = None
 
