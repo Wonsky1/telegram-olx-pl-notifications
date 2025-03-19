@@ -5,7 +5,7 @@ from typing import List
 
 from core.config import settings
 from tools.models import Flat
-from tools.utils import get_valid_url, is_time_within_last_n_minutes
+from tools.utils import get_description_summary, get_valid_url, is_time_within_last_n_minutes
 import requests
 from bs4 import BeautifulSoup
 
@@ -25,11 +25,10 @@ async def get_new_flats(url: str = settings.URL) -> List[Flat]:
     logging.info(response.status_code)
     soup = BeautifulSoup(response.text, "html.parser")
     divs = soup.find_all("div", attrs={"data-testid": "l-card"})
-    for div in divs:
+    for div in divs[:10]: # TODO RM
         location_date = div.find("p", attrs={"data-testid": "location-date"}).get_text(
             strip=True
         )
-
         if not "Dzisiaj" in location_date:
             continue
 
@@ -53,9 +52,20 @@ async def get_new_flats(url: str = settings.URL) -> List[Flat]:
         a_tag = title.find("a")
 
         flat_url = a_tag["href"]
-        flat_url = "https://www.olx.pl" + flat_url
-        title = title.get_text(strip=True)
+        if "otodom" in flat_url:
+            description = "otodom link"
+        else:
+            flat_url = "https://www.olx.pl" + flat_url
+            try:
+                description = get_flat_description(flat_url)
+                description = await get_description_summary(description)
+                if not description:
+                    raise Exception(f"error generating description for flat {flat_url}")
+            except Exception as e:
+                description = f"Failed to load description for email {flat_url}: {e}"
 
+        title = title.get_text(strip=True)
+        # TODO: ddd
         time_provided = datetime.strptime(time, "%H:%M").time()
         date_placeholder = datetime(2000, 1, 1)  # Date doesn't matter here
         datetime_provided = datetime.combine(date_placeholder, time_provided)
@@ -66,11 +76,22 @@ async def get_new_flats(url: str = settings.URL) -> List[Flat]:
             Flat(
                 title=title,
                 price=price,
+                # location=location, # TODO: ss
+                # created_at=time,
                 location=location,
                 created_at=time,
                 image_url=image_url,
                 flat_url=flat_url,
+                description=description
             )
         )
     logging.info(f"Found {len(result)} flats")
     return result
+
+
+def get_flat_description(flat_url: str) -> str:
+    response = requests.get(flat_url)
+    soup = BeautifulSoup(response.text, "html.parser")
+    description = soup.find("div", attrs={"data-cy": "ad_description"})
+    description = description.get_text(strip=True)
+    return description

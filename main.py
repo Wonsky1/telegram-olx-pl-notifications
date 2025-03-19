@@ -25,11 +25,6 @@ from tools.models import Flat
 from tools.utils import get_link
 from core.config import settings
 
-# def allowed_gai_family():
-#     return socket.AF_INET
-#
-#
-# urllib3_cn.allowed_gai_family = allowed_gai_family
 load_dotenv()
 
 
@@ -52,29 +47,68 @@ db = next(get_db())
 async def on_startup():
     asyncio.create_task(send_periodic_message())
 
+
 async def send_flats_message(chat_id: Union[int, str], flats: List[Flat]):
     if flats:
         await bot.send_photo(
             chat_id=chat_id,
             photo="https://tse4.mm.bing.net/th?id=OIG2.fso8nlFWoq9hafRkva2e&pid=ImgGn",
-            caption=f"I have found {len(flats)} flats, maybe one of them is going to be mouses new flat",
+            caption=f"I have found {len(flats)} flats, maybe one of them is going to be mouse's new flat",
         )
         for flat in flats[::-1]:
+            # Parse the description to extract structured information
+            desc_lines = flat.description.strip().split('\n')
+            price_info = ""
+            deposit_info = ""
+            animals_info = ""
+            rent_info = ""
+            
+            for line in desc_lines:
+                if line.startswith("price:"):
+                    price_info = line.replace("price:", "Price:").strip()
+                elif line.startswith("deposit:"):
+                    deposit_info = line.replace("deposit:", "Deposit:").strip()
+                elif line.startswith("animals_allowed:"):
+                    animals_allowed = line.replace("animals_allowed:", "").strip()
+                    if animals_allowed == "true":
+                        animals_info = "Pets: Allowed"
+                    elif animals_allowed == "false":
+                        animals_info = "Pets: Not allowed"
+                    else:
+                        animals_info = "Pets: Not specified"
+                elif line.startswith("rent:"):
+                    rent_info = line.replace("rent:", "Additional rent:").strip()
+            
+            # Format the message with emojis and better structure
             text = (
-                f"{flat.title}\n"
-                f"price: {flat.price}\n"
-                f"location: {flat.location}\n"
-                f"created_at: {flat.created_at}\n"
-                f"flat_url: {flat.flat_url}"
+                f"🏠 *{flat.title}*\n\n"
+                f"💰 *Price:* {flat.price}\n"
+                f"📍 *Location:* {flat.location}\n"
+                f"🕒 *Posted:* {flat.created_at}\n"
             )
+            
+            # Add parsed description details
+            if price_info:
+                text += f"💵 *{price_info}* PLN\n"
+            if deposit_info and deposit_info != "Deposit: 0":
+                text += f"🔐 *{deposit_info}* PLN\n"
+            if animals_info:
+                text += f"🐾 *{animals_info}*\n"
+            if rent_info and rent_info != "Additional rent: 0":
+                text += f"📊 *{rent_info}* PLN\n"
+            
+            # Add link to the listing
+            text += f"\n🔗 [View listing]({flat.flat_url})"
+            
+            # Send the message
             if not flat.image_url.startswith("http"):
                 flat.image_url = None
             if flat.image_url:
                 await bot.send_photo(
-                    chat_id=chat_id, photo=flat.image_url, caption=text
+                    chat_id=chat_id, photo=flat.image_url, caption=text, parse_mode="Markdown"
                 )
             else:
-                await bot.send_message(chat_id=chat_id, text=text)
+                await bot.send_message(chat_id=chat_id, text=text, parse_mode="Markdown")
 
 
 async def send_messages(bot_, chat_id: Union[str, int], url: str):
@@ -83,7 +117,6 @@ async def send_messages(bot_, chat_id: Union[str, int], url: str):
 
         logging.info(f"Sending {len(flats)} flats to {chat_id}")
         await send_flats_message(chat_id, flats)
-
 
 
 async def send_periodic_message():
@@ -109,15 +142,13 @@ async def start_monitoring(message: Message):
     task = get_task_by_chat_id(db, str(chat_id))
     if not task:
         create_task(db, chat_id=str(chat_id), url=url if url else settings.URL)
-
-        await message.answer("Starting monitoring")
-        await send_messages(bot, message.chat.id, url)
+        await message.answer("Starting monitoring... Please wait.")
+        asyncio.create_task(send_messages(bot, message.chat.id, url))
     else:
         await message.answer("Monitoring is already started")
 
 
-@dp.message(lambda message: message.text and message.text.lower() == "/end_monitoring")
-
+@dp.message(lambda message: message.text and message.text.lower() == "/stop_monitoring")
 async def end_monitoring(message: Message):
     chat_id = str(message.chat.id)
     task = get_task_by_chat_id(db, chat_id)
@@ -136,7 +167,7 @@ async def cmd_start(message: types.Message):
     kb = [
         [
             types.KeyboardButton(text="/start_monitoring"),
-            types.KeyboardButton(text="/end_monitoring"),
+            types.KeyboardButton(text="/stop_monitoring"),
         ],
     ]
     keyboard = types.ReplyKeyboardMarkup(
