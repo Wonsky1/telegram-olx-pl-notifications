@@ -12,6 +12,8 @@ async def listen_for_flats(bot, rabbit_client):
         f"flats_pending", 
         durable=True
     )
+
+    print("Awaiting requests for flats_pending")
     
     async def on_message(message):
         async with message.process():
