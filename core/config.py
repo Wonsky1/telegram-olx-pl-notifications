@@ -2,12 +2,8 @@
 
 import os
 from logging import getLogger
-from typing import Optional, List
-
-from pydantic import ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from dotenv import load_dotenv
-from langchain_groq import ChatGroq
 
 
 logger = getLogger(__name__)
@@ -30,36 +26,6 @@ class Settings(BaseSettings):
     )
 
     DEFAULT_LAST_MINUTES_GETTING: int = 75
-    SLEEP_MINUTES: int = 60
-
-    # Model Configuration
-    GROQ_API_KEY: Optional[str] = None
-    GROQ_MODEL_NAME: Optional[str] = None
-
-    RABBITMQ_HOST: str
-    RABBITMQ_PORT: int
-
-    RABBITMQ_EXCHANGES: List[str] = ["flats"]
-    RABBITMQ_QUEUES: List[str] = ["pending"]
-
-
-    GENERATIVE_MODEL: Optional[ChatGroq] = None
-
-    @field_validator("GENERATIVE_MODEL")
-    def generative_model(
-        cls, value: Optional[ChatGroq], info: ValidationInfo
-    ) -> Optional[ChatGroq]:
-        env_data = info.data
-
-        model_name = env_data.get("GROQ_MODEL_NAME")
-        api_key = env_data.get("GROQ_API_KEY")
-
-        if model_name:
-            return ChatGroq(model_name=model_name, api_key=api_key)
-        else:
-            raise ValueError(
-                "GROQ_MODEL_NAME must be set"
-            )
-
+    CHECK_FREQUENCY_SECONDS: int = 10
 
 settings = Settings()

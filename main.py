@@ -1,106 +1,134 @@
 # telegram_service.py
 import asyncio
-import json
+from datetime import datetime, timedelta
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command, CommandStart
 from core.config import settings
-from core.rabbitmq_client import RabbitMQClient
-from tools.utils import get_link
+from db.database import (
+    get_db, 
+    get_flats_to_send_for_task, 
+    init_db, 
+    create_task, 
+    delete_task_by_chat_id,
+    update_last_got_flat,
+    get_pending_tasks,
+    get_task_by_chat_id
+)
+from tools.texts import get_link
+from db.database import get_task_by_chat_id
 
-async def listen_for_flats(bot, rabbit_client):
-    queue = await rabbit_client.channel.declare_queue(
-        f"flats_pending", 
-        durable=True
-    )
+init_db()
 
-    print("Awaiting requests for flats_pending")
+
+async def check_and_send_flats(bot):
+    """Check for new flats and send them to users"""
+    db = next(get_db())
     
-    async def on_message(message):
-        async with message.process():
-            data = json.loads(message.body.decode())
-            
-            if data.get("type") == "SEND_FLATS":
-                chat_id = data.get("chat_id")
-                flats = data.get("flats", [])
+    try:
+        # Get all users who need flat updates using the provided function
+        pending_tasks = get_pending_tasks(db)
+
+        for task in pending_tasks:            
+            flats_to_send = get_flats_to_send_for_task(db, task)
+            print(f"Found {len(flats_to_send)} flats to send")
+            if flats_to_send:
+                await bot.send_photo(
+                    chat_id=task.chat_id,
+                    photo="https://tse4.mm.bing.net/th?id=OIG2.fso8nlFWoq9hafRkva2e&pid=ImgGn",
+                    caption=f"I have found {len(flats_to_send)} flats, maybe one of them is going to be mouse's new flat",
+                )
                 
-                if flats:
-                    # Send the flats to the user
-                    await bot.send_photo(
-                        chat_id=chat_id,
-                        photo="https://tse4.mm.bing.net/th?id=OIG2.fso8nlFWoq9hafRkva2e&pid=ImgGn",
-                        caption=f"I have found {len(flats)} flats, maybe one of them is going to be mouse's new flat",
+                for flat in flats_to_send[::-1]:
+                    desc_lines = flat.description.strip().split('\n')
+                    price_info = ""
+                    deposit_info = ""
+                    animals_info = ""
+                    rent_info = ""
+                    
+                    for line in desc_lines:
+                        if line.startswith("price:"):
+                            price_info = line.replace("price:", "Price:").strip()
+                        elif line.startswith("deposit:"):
+                            deposit_info = line.replace("deposit:", "Deposit:").strip()
+                        elif line.startswith("animals_allowed:"):
+                            animals_allowed = line.replace("animals_allowed:", "").strip()
+                            if animals_allowed == "true":
+                                animals_info = "Pets: Allowed"
+                            elif animals_allowed == "false":
+                                animals_info = "Pets: Not allowed"
+                            else:
+                                animals_info = "Pets: Not specified"
+                        elif line.startswith("rent:"):
+                            rent_info = line.replace("rent:", "Additional rent:").strip()
+                    
+                    text = (
+                        f"🏠 *{flat.title}*\n\n"
+                        f"💰 *Price:* {flat.price}\n"
+                        f"📍 *Location:* {flat.location}\n"
+                        f"🕒 *Posted:* {flat.created_at_pretty}\n"
                     )
                     
-                    for flat in flats[::-1]:
-                        # Parse the description to extract structured information
-                        desc_lines = flat.get("description", "").strip().split('\n')
-                        price_info = ""
-                        deposit_info = ""
-                        animals_info = ""
-                        rent_info = ""
-                        
-                        for line in desc_lines:
-                            if line.startswith("price:"):
-                                price_info = line.replace("price:", "Price:").strip()
-                            elif line.startswith("deposit:"):
-                                deposit_info = line.replace("deposit:", "Deposit:").strip()
-                            elif line.startswith("animals_allowed:"):
-                                animals_allowed = line.replace("animals_allowed:", "").strip()
-                                if animals_allowed == "true":
-                                    animals_info = "Pets: Allowed"
-                                elif animals_allowed == "false":
-                                    animals_info = "Pets: Not allowed"
-                                else:
-                                    animals_info = "Pets: Not specified"
-                            elif line.startswith("rent:"):
-                                rent_info = line.replace("rent:", "Additional rent:").strip()
-                        
-                        # Format the message with emojis and better structure
-                        text = (
-                            f"🏠 *{flat.get('title')}*\n\n"
-                            f"💰 *Price:* {flat.get('price')}\n"
-                            f"📍 *Location:* {flat.get('location')}\n"
-                            f"🕒 *Posted:* {flat.get('created_at')}\n"
+                    if price_info:
+                        text += f"💵 *{price_info}* PLN\n"
+                    if deposit_info and deposit_info != "Deposit: 0":
+                        text += f"🔐 *{deposit_info}* PLN\n"
+                    if animals_info:
+                        text += f"🐾 *{animals_info}*\n"
+                    if rent_info and rent_info != "Additional rent: 0":
+                        text += f"📊 *{rent_info}* PLN\n"
+                    
+                    text += f"\n🔗 [View listing]({flat.flat_url})"
+                    
+                    if flat.image_url and flat.image_url.startswith("http"):
+                        await bot.send_photo(
+                            chat_id=task.chat_id, 
+                            photo=flat.image_url, 
+                            caption=text, 
+                            parse_mode="Markdown"
                         )
-                        
-                        # Add parsed description details
-                        if price_info:
-                            text += f"💵 *{price_info}* PLN\n"
-                        if deposit_info and deposit_info != "Deposit: 0":
-                            text += f"🔐 *{deposit_info}* PLN\n"
-                        if animals_info:
-                            text += f"🐾 *{animals_info}*\n"
-                        if rent_info and rent_info != "Additional rent: 0":
-                            text += f"📊 *{rent_info}* PLN\n"
-                        
-                        # Add link to the listing
-                        text += f"\n🔗 [View listing]({flat.get('flat_url')})"
-                        
-                        # Send the message
-                        image_url = flat.get("image_url")
-                        if image_url and image_url.startswith("http"):
-                            await bot.send_photo(
-                                chat_id=chat_id, 
-                                photo=image_url, 
-                                caption=text, 
-                                parse_mode="Markdown"
-                            )
-                        else:
-                            await bot.send_message(
-                                chat_id=chat_id, 
-                                text=text, 
-                                parse_mode="Markdown"
-                            )
-    
-    await queue.consume(on_message)
+                    else:
+                        await bot.send_message(
+                            chat_id=task.chat_id, 
+                            text=text, 
+                            parse_mode="Markdown"
+                        )
+                    
+                    await asyncio.sleep(0.5)  # Adjust the delay as needed
+                
+                # Update the last_got_flat timestamp using the provided function
+                update_last_got_flat(db, task.chat_id)
+                
+                # Update last_updated too
+                task.last_updated = datetime.now()
+                db.commit()
+            else:
+                print(f"Skipping for {task.chat_id}")
+                task.last_got_flat = datetime.now() - timedelta(minutes=60)
+                task.last_updated = datetime.now()
+                db.commit()
+
+
+    except Exception as e:
+        print(f"Error in check_and_send_flats: {e}")
+    finally:
+        db.close()
+
+
+async def periodic_check(bot):
+    """Periodically check for new flats and send them to users"""
+    while True:
+        try:
+            await check_and_send_flats(bot)
+        except Exception as e:
+            print(f"Error in periodic check: {e}")
+        print(f"Sleeping for {settings.CHECK_FREQUENCY_SECONDS} seconds")
+        await asyncio.sleep(settings.CHECK_FREQUENCY_SECONDS)  # Check according to settings
+
 
 async def telegram_main():
     # Initialize bot
     bot = Bot(token=settings.BOT_TOKEN)
     dp = Dispatcher()
-    
-    # Initialize RabbitMQ client
-    rabbit_client = await RabbitMQClient().connect()
     
     # Command handlers
     @dp.message(CommandStart())
@@ -120,34 +148,45 @@ async def telegram_main():
     
     @dp.message(Command(commands=["start_monitoring"]))
     async def start_monitoring(message: types.Message):
-        # Send message to RabbitMQ to start monitoring
-        await rabbit_client.send_message(
-            exchange="flats",
-            body={
-                "type": "START_MONITORING",
-                "chat_id": str(message.chat.id),
-                "url": get_link(message.text) or settings.URL
-            }
-        )
-        await message.answer("Starting monitoring... Please wait.")
+        db = next(get_db())
+        try:
+            url = get_link(message.text) or settings.URL
+            task = get_task_by_chat_id(db, str(message.chat.id))
+            if not task:
+                create_task(db, str(message.chat.id), url)
+                await message.answer(f"Monitoring started for url:\n🔗 [View url]({url})\nYou'll receive updates about new flats.", parse_mode="Markdown")
+            else:
+                await message.answer("Monitoring is already started")
+        except Exception as e:
+            print(f"Error starting monitoring: {e}")
+            await message.answer("Error starting monitoring. Please try again.")
+        finally:
+            db.close()
     
     @dp.message(Command(commands=["stop_monitoring"]))
     async def stop_monitoring(message: types.Message):
-        # Send message to RabbitMQ to stop monitoring
-        await rabbit_client.send_message(
-            exchange="flats",
-            body={
-                "type": "STOP_MONITORING",
-                "chat_id": str(message.chat.id)
-            }
-        )
-        await message.answer("Monitoring stopped.")
+        db = next(get_db())
+        try:
+            task = get_task_by_chat_id(db, str(message.chat.id))
+            if task:
+                delete_task_by_chat_id(db, str(message.chat.id))
+                await message.answer("Monitoring stopped.")
+            else:
+                await message.answer("Monitoring is already stopped")
+        except Exception as e:
+            print(f"Error stopping monitoring: {e}")
+            await message.answer("Error stopping monitoring. Please try again.")
+        finally:
+            db.close()
     
-    # Start listening for flats messages
-    asyncio.create_task(listen_for_flats(bot, rabbit_client))
+    # Start periodic check for new flats
+    print("Starting periodic check for new flats...")
+    asyncio.create_task(periodic_check(bot))
     
     # Start polling
+    print("Starting bot polling...")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
+    print("Starting telegram service...")
     asyncio.run(telegram_main())
