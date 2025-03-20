@@ -4,7 +4,6 @@ import logging
 from datetime import datetime, timedelta
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command, CommandStart
-from core.config import settings
 from db.database import (
     get_db, 
     get_flats_to_send_for_task, 
@@ -15,8 +14,9 @@ from db.database import (
     get_pending_tasks,
     get_task_by_chat_id
 )
-from tools.texts import get_link
+from tools.texts import get_link, get_valid_url
 from db.database import get_task_by_chat_id
+from core.config import settings
 
 logging.basicConfig(
     level=logging.INFO,
@@ -166,7 +166,8 @@ async def telegram_main():
         logger.info(f"Start monitoring command received from chat_id {message.chat.id}")
         db = next(get_db())
         try:
-            url = get_link(message.text) or settings.URL
+            url = get_link(message.text)
+            url = get_valid_url(url, settings.URL)
             logger.debug(f"Using URL: {url}")
             task = get_task_by_chat_id(db, str(message.chat.id))
             if not task:

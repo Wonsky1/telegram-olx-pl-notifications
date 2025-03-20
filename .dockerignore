@@ -2,3 +2,7 @@
 .env
 venv
 *.db
+.vscode
+.gitignore
+dev.env
+README.md

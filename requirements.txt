@@ -2,5 +2,7 @@ aiogram
 python-dotenv
 sqlalchemy
 pydantic-settings
+validators
+requests
 
 psycopg2-binary
