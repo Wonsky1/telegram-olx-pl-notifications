@@ -185,7 +185,13 @@ async def telegram_main():
     
     # Start polling
     print("Starting bot polling...")
-    await dp.start_polling(bot)
+    chat_id = settings.CHAT_IDS
+    try:
+        await bot.send_message(chat_id=chat_id, text="BOT WAS STARTED")
+        await dp.start_polling(bot)
+    finally:
+        await bot.send_message(chat_id=chat_id, text="BOT WAS STOPPED")
+
 
 if __name__ == "__main__":
     print("Starting telegram service...")
