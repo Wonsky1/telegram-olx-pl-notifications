@@ -7,9 +7,7 @@ from sqlalchemy.orm import sessionmaker
 
 from core.config import settings
 
-DATABASE_URL = "sqlite:///monitoring.db"
-
-engine = create_engine(DATABASE_URL)
+engine = create_engine(settings.DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -21,6 +19,22 @@ class MonitoringTask(Base):
     chat_id = Column(String, unique=True, index=True)
     url = Column(String, nullable=False)
     last_updated = Column(DateTime, nullable=False)
+    last_got_flat = Column(DateTime, nullable=True)
+
+
+class FlatRecord(Base):
+    __tablename__ = "flat_records"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    flat_url = Column(String, unique=True, index=True)
+    title = Column(String)
+    price = Column(String)
+    location = Column(String)
+    created_at = Column(DateTime)
+    created_at_pretty = Column(String)
+    image_url = Column(String, nullable=True)
+    description = Column(String)
+    first_seen = Column(DateTime, default=datetime.now)
 
 
 def init_db():
@@ -62,13 +76,41 @@ def get_all_tasks(db):
     return db.query(MonitoringTask).all()
 
 
-def get_users_pending(db) -> List[Tuple[str, str]]:
+def get_pending_tasks(db) -> List[MonitoringTask]:
     """
-    Retrieve chat_ids and their associated urls for tasks where
-    the last_updated field is older than the threshold defined in settings.TIME.
+    Retrieve tasks where the last_got_flat is either None or older than DEFAULT_LAST_MINUTES_GETTING.
     """
-    time_threshold = datetime.now() - timedelta(seconds=settings.SLEEP_MINUTES)
-    tasks = db.query(MonitoringTask.chat_id, MonitoringTask.url).filter(
-        MonitoringTask.last_updated < time_threshold
+    time_threshold = datetime.now() - timedelta(minutes=settings.DEFAULT_LAST_MINUTES_GETTING)
+    tasks = db.query(MonitoringTask).filter(
+        (MonitoringTask.last_got_flat == None) | 
+        (MonitoringTask.last_got_flat < time_threshold)
     ).all()
     return tasks
+
+
+def update_last_got_flat(db, chat_id: str):
+    """Update the last_got_flat timestamp for a given chat ID."""
+    task = get_task_by_chat_id(db, chat_id)
+    if task:
+        task.last_got_flat = datetime.now()
+        db.commit()
+
+def get_flats_to_send_for_task(db, task: MonitoringTask) -> List[FlatRecord]:
+    """
+    Get a list of FlatRecords that should be sent for a given MonitoringTask.
+    If the task has a 'last_got_flat' timestamp, return flats seen after that time.
+    Otherwise, return flats seen in the last DEFAULT_LAST_MINUTES_GETTING minutes.
+    """
+    flats_query = db.query(FlatRecord)
+
+    if task.last_got_flat:
+        flats_to_send = flats_query.filter(
+            FlatRecord.first_seen > task.last_got_flat
+        ).all()
+    else:
+        time_threshold = datetime.now() - timedelta(minutes=settings.DEFAULT_LAST_MINUTES_GETTING)
+        flats_to_send = flats_query.filter(
+            FlatRecord.first_seen > time_threshold
+        ).all()
+
+    return flats_to_send

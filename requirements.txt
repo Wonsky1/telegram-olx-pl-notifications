@@ -1,7 +1,6 @@
-validators
 aiogram
 python-dotenv
-requests
-beautifulsoup4
 sqlalchemy
 pydantic-settings
+
+psycopg2-binary

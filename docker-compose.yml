@@ -1,0 +1,37 @@
+version: "3.9"
+
+services:
+  telegram-service:
+    image: wonsky/telegram-service:latest
+    restart: unless-stopped
+    env_file:
+      - telegram.env
+    environment:
+      - URL=https://www.olx.pl/nieruchomosci/mieszkania/wynajem/warszawa/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=4000
+    depends_on:
+      - postgres
+
+  telegram-service-worker:
+    image: wonsky/telegram-service-worker:latest
+    restart: unless-stopped
+    env_file:
+      - worker.env
+    environment:
+      - URL=https://www.olx.pl/nieruchomosci/mieszkania/wynajem/warszawa/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=4000
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+      POSTGRES_DB: mydatabase
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5001:5432"
+
+volumes:
+  postgres_data:
