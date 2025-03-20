@@ -78,9 +78,9 @@ def get_all_tasks(db):
 
 def get_pending_tasks(db) -> List[MonitoringTask]:
     """
-    Retrieve tasks where the last_got_flat is either None or older than DEFAULT_LAST_MINUTES_GETTING.
+    Retrieve tasks where the last_got_flat is either None or older than DEFAULT_SENDING_FREQUENCY_MINUTES.
     """
-    time_threshold = datetime.now() - timedelta(minutes=settings.DEFAULT_LAST_MINUTES_GETTING)
+    time_threshold = datetime.now() - timedelta(minutes=settings.DEFAULT_SENDING_FREQUENCY_MINUTES)
     tasks = db.query(MonitoringTask).filter(
         (MonitoringTask.last_got_flat == None) | 
         (MonitoringTask.last_got_flat < time_threshold)

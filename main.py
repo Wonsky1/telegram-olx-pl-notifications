@@ -23,7 +23,7 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler("bot.log")
+        # logging.FileHandler("bot.log")
     ]
 )
 logger = logging.getLogger(__name__)
@@ -192,7 +192,7 @@ async def telegram_main():
             if task:
                 delete_task_by_chat_id(db, str(message.chat.id))
                 logger.info(f"Deleted monitoring task for chat_id {message.chat.id}")
-                await message.answer("Monitoring stopped.")
+                await message.answer("Monitoring stopped")
             else:
                 logger.debug(f"No monitoring task found for chat_id {message.chat.id}")
                 await message.answer("Monitoring is already stopped")
