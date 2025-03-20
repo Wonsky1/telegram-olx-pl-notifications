@@ -1,5 +1,6 @@
 # telegram_service.py
 import asyncio
+import logging
 from datetime import datetime, timedelta
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command, CommandStart
@@ -17,6 +18,16 @@ from db.database import (
 from tools.texts import get_link
 from db.database import get_task_by_chat_id
 
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler("bot.log")
+    ]
+)
+logger = logging.getLogger(__name__)
+
 init_db()
 
 
@@ -30,7 +41,7 @@ async def check_and_send_flats(bot):
 
         for task in pending_tasks:            
             flats_to_send = get_flats_to_send_for_task(db, task)
-            print(f"Found {len(flats_to_send)} flats to send")
+            logger.info(f"Found {len(flats_to_send)} flats to send for chat_id {task.chat_id}")
             if flats_to_send:
                 await bot.send_photo(
                     chat_id=task.chat_id,
@@ -101,15 +112,16 @@ async def check_and_send_flats(bot):
                 # Update last_updated too
                 task.last_updated = datetime.now()
                 db.commit()
+                logger.info(f"Updated timestamps for chat_id {task.chat_id}")
             else:
-                print(f"Skipping for {task.chat_id}")
+                logger.debug(f"No new flats for chat_id {task.chat_id}")
                 task.last_got_flat = datetime.now() - timedelta(minutes=60)
                 task.last_updated = datetime.now()
                 db.commit()
 
 
     except Exception as e:
-        print(f"Error in check_and_send_flats: {e}")
+        logger.error(f"Error in check_and_send_flats: {e}", exc_info=True)
     finally:
         db.close()
 
@@ -118,21 +130,24 @@ async def periodic_check(bot):
     """Periodically check for new flats and send them to users"""
     while True:
         try:
+            logger.debug("Starting periodic check")
             await check_and_send_flats(bot)
         except Exception as e:
-            print(f"Error in periodic check: {e}")
-        print(f"Sleeping for {settings.CHECK_FREQUENCY_SECONDS} seconds")
+            logger.error(f"Error in periodic check: {e}", exc_info=True)
+        logger.info(f"Sleeping for {settings.CHECK_FREQUENCY_SECONDS} seconds")
         await asyncio.sleep(settings.CHECK_FREQUENCY_SECONDS)  # Check according to settings
 
 
 async def telegram_main():
     # Initialize bot
+    logger.info("Initializing bot")
     bot = Bot(token=settings.BOT_TOKEN)
     dp = Dispatcher()
     
     # Command handlers
     @dp.message(CommandStart())
     async def cmd_start(message: types.Message):
+        logger.info(f"Start command received from chat_id {message.chat.id}")
         kb = [
             [
                 types.KeyboardButton(text="/start_monitoring"),
@@ -148,51 +163,62 @@ async def telegram_main():
     
     @dp.message(Command(commands=["start_monitoring"]))
     async def start_monitoring(message: types.Message):
+        logger.info(f"Start monitoring command received from chat_id {message.chat.id}")
         db = next(get_db())
         try:
             url = get_link(message.text) or settings.URL
+            logger.debug(f"Using URL: {url}")
             task = get_task_by_chat_id(db, str(message.chat.id))
             if not task:
                 create_task(db, str(message.chat.id), url)
+                logger.info(f"Created monitoring task for chat_id {message.chat.id}")
                 await message.answer(f"Monitoring started for url:\n🔗 [View url]({url})\nYou'll receive updates about new flats.", parse_mode="Markdown")
             else:
+                logger.debug(f"Monitoring already started for chat_id {message.chat.id}")
                 await message.answer("Monitoring is already started")
         except Exception as e:
-            print(f"Error starting monitoring: {e}")
+            logger.error(f"Error starting monitoring: {e}", exc_info=True)
             await message.answer("Error starting monitoring. Please try again.")
         finally:
             db.close()
     
     @dp.message(Command(commands=["stop_monitoring"]))
     async def stop_monitoring(message: types.Message):
+        logger.info(f"Stop monitoring command received from chat_id {message.chat.id}")
         db = next(get_db())
         try:
             task = get_task_by_chat_id(db, str(message.chat.id))
             if task:
                 delete_task_by_chat_id(db, str(message.chat.id))
+                logger.info(f"Deleted monitoring task for chat_id {message.chat.id}")
                 await message.answer("Monitoring stopped.")
             else:
+                logger.debug(f"No monitoring task found for chat_id {message.chat.id}")
                 await message.answer("Monitoring is already stopped")
         except Exception as e:
-            print(f"Error stopping monitoring: {e}")
+            logger.error(f"Error stopping monitoring: {e}", exc_info=True)
             await message.answer("Error stopping monitoring. Please try again.")
         finally:
             db.close()
     
     # Start periodic check for new flats
-    print("Starting periodic check for new flats...")
+    logger.info("Starting periodic check for new flats...")
     asyncio.create_task(periodic_check(bot))
     
     # Start polling
-    print("Starting bot polling...")
+    logger.info("Starting bot polling...")
     chat_id = settings.CHAT_IDS
     try:
         await bot.send_message(chat_id=chat_id, text="BOT WAS STARTED")
+        logger.info(f"Bot started notification sent to chat_id {chat_id}")
         await dp.start_polling(bot)
+    except Exception as e:
+        logger.critical(f"Fatal error in telegram_main: {e}", exc_info=True)
     finally:
+        logger.info("Bot stopped, sending notification")
         await bot.send_message(chat_id=chat_id, text="BOT WAS STOPPED")
 
 
 if __name__ == "__main__":
-    print("Starting telegram service...")
+    logger.info("Starting telegram service...")
     asyncio.run(telegram_main())
