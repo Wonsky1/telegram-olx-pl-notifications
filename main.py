@@ -1,7 +1,8 @@
 # telegram_service.py
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+import pytz
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command, CommandStart
 from db.database import (
@@ -18,6 +19,16 @@ from tools.texts import get_link, get_valid_url
 from db.database import get_task_by_chat_id
 from core.config import settings
 
+# Warsaw timezone
+WARSAW_TZ = pytz.timezone('Europe/Warsaw')
+
+def now_warsaw():
+    """Get current datetime in Warsaw timezone as naive datetime"""
+    # Get current UTC time, convert to Warsaw timezone, then make it naive
+    utc_now = datetime.now(timezone.utc)
+    warsaw_now = utc_now.astimezone(WARSAW_TZ)
+    return warsaw_now.replace(tzinfo=None)  # Remove timezone info for database storage
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -32,7 +43,7 @@ init_db()
 
 
 async def check_and_send_flats(bot):
-    """Check for new flats and send them to users"""
+    """Check for new items and send them to users"""
     db = next(get_db())
     
     try:
@@ -41,12 +52,12 @@ async def check_and_send_flats(bot):
 
         for task in pending_tasks:            
             flats_to_send = get_flats_to_send_for_task(db, task)
-            logger.info(f"Found {len(flats_to_send)} flats to send for chat_id {task.chat_id}")
+            logger.info(f"Found {len(flats_to_send)} items to send for chat_id {task.chat_id}")
             if flats_to_send:
                 await bot.send_photo(
                     chat_id=task.chat_id,
                     photo="https://tse4.mm.bing.net/th?id=OIG2.fso8nlFWoq9hafRkva2e&pid=ImgGn",
-                    caption=f"I have found {len(flats_to_send)} flats, maybe one of them is going to be mouse's new flat",
+                    caption=f"I have found {len(flats_to_send)} items, maybe one of them is what you're looking for",
                 )
                 
                 for flat in flats_to_send[::-1]:
@@ -73,7 +84,7 @@ async def check_and_send_flats(bot):
                             rent_info = line.replace("rent:", "Additional rent:").strip()
                     
                     text = (
-                        f"🏠 *{flat.title}*\n\n"
+                        f"📦 *{flat.title}*\n\n"
                         f"💰 *Price:* {flat.price}\n"
                         f"📍 *Location:* {flat.location}\n"
                         f"🕒 *Posted:* {flat.created_at_pretty}\n"
@@ -110,13 +121,13 @@ async def check_and_send_flats(bot):
                 update_last_got_flat(db, task.chat_id)
                 
                 # Update last_updated too
-                task.last_updated = datetime.now()
+                task.last_updated = now_warsaw()
                 db.commit()
                 logger.info(f"Updated timestamps for chat_id {task.chat_id}")
             else:
-                logger.debug(f"No new flats for chat_id {task.chat_id}")
-                task.last_got_flat = datetime.now() - timedelta(minutes=60)
-                task.last_updated = datetime.now()
+                logger.debug(f"No new items for chat_id {task.chat_id}")
+                task.last_got_flat = now_warsaw()
+                task.last_updated = now_warsaw()
                 db.commit()
 
 
@@ -127,7 +138,7 @@ async def check_and_send_flats(bot):
 
 
 async def periodic_check(bot):
-    """Periodically check for new flats and send them to users"""
+    """Periodically check for new items and send them to users"""
     while True:
         try:
             logger.debug("Starting periodic check")
@@ -150,14 +161,17 @@ async def telegram_main():
         logger.info(f"Start command received from chat_id {message.chat.id}")
         kb = [
             [
-                types.KeyboardButton(text="/start_monitoring"),
-                types.KeyboardButton(text="/stop_monitoring"),
+                types.KeyboardButton(text="Start monitoring"),
+                types.KeyboardButton(text="Stop monitoring"),
+            ],
+            [
+                types.KeyboardButton(text="Status"),
             ],
         ]
         keyboard = types.ReplyKeyboardMarkup(
             keyboard=kb,
             resize_keyboard=True,
-            input_field_placeholder="Start or stop monitoring",
+            input_field_placeholder="Start, stop monitoring, or check status",
         )
         await message.answer("Hello Yana, this is a bot for you <3", reply_markup=keyboard)
     
@@ -173,7 +187,7 @@ async def telegram_main():
             if not task:
                 create_task(db, str(message.chat.id), url)
                 logger.info(f"Created monitoring task for chat_id {message.chat.id}")
-                await message.answer(f"Monitoring started for url:\n🔗 [View url]({url})\nYou'll receive updates about new flats.", parse_mode="Markdown")
+                await message.answer(f"Monitoring started for url:\n🔗 [View url]({url})\nYou'll receive updates about new items.", parse_mode="Markdown")
             else:
                 logger.debug(f"Monitoring already started for chat_id {message.chat.id}")
                 await message.answer("Monitoring is already started")
@@ -202,8 +216,49 @@ async def telegram_main():
         finally:
             db.close()
     
-    # Start periodic check for new flats
-    logger.info("Starting periodic check for new flats...")
+    @dp.message(Command(commands=["status"]))
+    async def status(message: types.Message):
+        logger.info(f"Status command received from chat_id {message.chat.id}")
+        db = next(get_db())
+        try:
+            task = get_task_by_chat_id(db, str(message.chat.id))
+            if task:
+                status_text = (
+                    f"✅ *Monitoring is ACTIVE*\n\n"
+                    f"🔗 *URL:* [View link]({task.url})\n"
+                    f"🕒 *Last updated:* {task.last_updated.strftime('%Y-%m-%d %H:%M:%S')}\n"
+                )
+                if task.last_got_flat:
+                    status_text += f"📦 *Last item found:* {task.last_got_flat.strftime('%Y-%m-%d %H:%M:%S')}\n"
+                else:
+                    status_text += f"📦 *Last item found:* Never\n"
+                await message.answer(status_text, parse_mode="Markdown")
+            else:
+                await message.answer("📋 *No active monitoring found*\n\nYou don't have any monitoring tasks set up.\nStart your monitoring to begin monitoring.", parse_mode="Markdown")
+        except Exception as e:
+            logger.error(f"Error getting status: {e}", exc_info=True)
+            await message.answer("Error getting status. Please try again.")
+        finally:
+            db.close()
+    
+    # Text button handlers
+    @dp.message(lambda message: message.text == "Start monitoring")
+    async def start_monitoring_button(message: types.Message):
+        # Call the same logic as the command handler
+        await start_monitoring(message)
+    
+    @dp.message(lambda message: message.text == "Stop monitoring")
+    async def stop_monitoring_button(message: types.Message):
+        # Call the same logic as the command handler
+        await stop_monitoring(message)
+    
+    @dp.message(lambda message: message.text == "Status")
+    async def status_button(message: types.Message):
+        # Call the same logic as the command handler
+        await status(message)
+    
+    # Start periodic check for new items
+    logger.info("Starting periodic check for new items...")
     asyncio.create_task(periodic_check(bot))
     
     # Start polling

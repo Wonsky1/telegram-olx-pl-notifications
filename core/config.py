@@ -25,8 +25,8 @@ class Settings(BaseSettings):
 
     URL: str
 
-    DEFAULT_LAST_MINUTES_GETTING: int = 75
-    DEFAULT_SENDING_FREQUENCY_MINUTES: int = 60
+    DEFAULT_LAST_MINUTES_GETTING: int = 60
+    DEFAULT_SENDING_FREQUENCY_MINUTES: float = 5
     CHECK_FREQUENCY_SECONDS: int = 10
 
 settings = Settings()

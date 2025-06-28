@@ -4,5 +4,6 @@ sqlalchemy
 pydantic-settings
 validators
 requests
+pytz
 
 psycopg2-binary
