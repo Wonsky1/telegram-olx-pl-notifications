@@ -8,4 +8,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-CMD ["python", "main.py"]
+# Run database migrations and start the application
+CMD ["sh", "-c", "python migrate.py upgrade && python main.py"]

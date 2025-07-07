@@ -1,6 +1,7 @@
 aiogram
 python-dotenv
 sqlalchemy
+alembic
 pydantic-settings
 validators
 requests

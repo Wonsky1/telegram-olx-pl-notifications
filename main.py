@@ -126,7 +126,8 @@ async def check_and_send_flats(bot):
                 logger.info(f"Updated timestamps for chat_id {task.chat_id}")
             else:
                 logger.debug(f"No new items for chat_id {task.chat_id}")
-                task.last_got_flat = now_warsaw()
+                # Don't update timestamps when no new items are found
+                # Only update last_updated to indicate the check was performed
                 task.last_updated = now_warsaw()
                 db.commit()
 

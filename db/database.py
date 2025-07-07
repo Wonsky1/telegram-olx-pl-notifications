@@ -38,6 +38,7 @@ class FlatRecord(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     flat_url = Column(String, unique=True, index=True)
+    source_url = Column(String, nullable=False, index=True)  # URL from which this flat was extracted
     title = Column(String)
     price = Column(String)
     location = Column(String)
@@ -111,20 +112,20 @@ def get_flats_to_send_for_task(db, task: MonitoringTask) -> List[FlatRecord]:
     Get a list of FlatRecords that should be sent for a given MonitoringTask.
     If the task has a 'last_got_flat' timestamp, return flats seen after that time.
     Otherwise, return flats seen in the last DEFAULT_LAST_MINUTES_GETTING minutes.
-    Filter flats to only include those matching the exact monitoring URL.
+    Filter flats to only include those matching the exact monitoring source URL.
     """
     flats_query = db.query(FlatRecord)
 
     if task.last_got_flat:
         flats_to_send = flats_query.filter(
             FlatRecord.first_seen > task.last_got_flat,
-            FlatRecord.flat_url == task.url
+            FlatRecord.source_url == task.url
         ).all()
     else:
         time_threshold = now_warsaw() - timedelta(minutes=settings.DEFAULT_LAST_MINUTES_GETTING)
         flats_to_send = flats_query.filter(
             FlatRecord.first_seen > time_threshold,
-            FlatRecord.flat_url == task.url
+            FlatRecord.source_url == task.url
         ).all()
 
     return flats_to_send
