@@ -30,15 +30,15 @@ class MonitoringTask(Base):
     chat_id = Column(String, unique=True, index=True)
     url = Column(String, nullable=False)
     last_updated = Column(DateTime, nullable=False)
-    last_got_flat = Column(DateTime, nullable=True)
+    last_got_item = Column(DateTime, nullable=True)
 
 
-class FlatRecord(Base):
-    __tablename__ = "flat_records"
+class ItemRecord(Base):
+    __tablename__ = "item_records"
     
     id = Column(Integer, primary_key=True, index=True)
-    flat_url = Column(String, unique=True, index=True)
-    source_url = Column(String, nullable=False, index=True)  # URL from which this flat was extracted
+    item_url = Column(String, unique=True, index=True)
+    source_url = Column(String, nullable=False, index=True)  # URL from which this item was extracted
     title = Column(String)
     price = Column(String)
     location = Column(String)
@@ -90,42 +90,42 @@ def get_all_tasks(db):
 
 def get_pending_tasks(db) -> List[MonitoringTask]:
     """
-    Retrieve tasks where the last_got_flat is either None or older than DEFAULT_SENDING_FREQUENCY_MINUTES.
+    Retrieve tasks where the last_got_item is either None or older than DEFAULT_SENDING_FREQUENCY_MINUTES.
     """
     time_threshold = now_warsaw() - timedelta(minutes=settings.DEFAULT_SENDING_FREQUENCY_MINUTES)
     tasks = db.query(MonitoringTask).filter(
-        (MonitoringTask.last_got_flat == None) | 
-        (MonitoringTask.last_got_flat < time_threshold)
+        (MonitoringTask.last_got_item == None) | 
+        (MonitoringTask.last_got_item < time_threshold)
     ).all()
     return tasks
 
 
-def update_last_got_flat(db, chat_id: str):
-    """Update the last_got_flat timestamp for a given chat ID."""
+def update_last_got_item(db, chat_id: str):
+    """Update the last_got_item timestamp for a given chat ID."""
     task = get_task_by_chat_id(db, chat_id)
     if task:
-        task.last_got_flat = now_warsaw()
+        task.last_got_item = now_warsaw()
         db.commit()
 
-def get_flats_to_send_for_task(db, task: MonitoringTask) -> List[FlatRecord]:
+def get_items_to_send_for_task(db, task: MonitoringTask) -> List[ItemRecord]:
     """
-    Get a list of FlatRecords that should be sent for a given MonitoringTask.
-    If the task has a 'last_got_flat' timestamp, return flats seen after that time.
-    Otherwise, return flats seen in the last DEFAULT_LAST_MINUTES_GETTING minutes.
-    Filter flats to only include those matching the exact monitoring source URL.
+    Get a list of ItemRecords that should be sent for a given MonitoringTask.
+    If the task has a 'last_got_item' timestamp, return items seen after that time.
+    Otherwise, return items seen in the last DEFAULT_LAST_MINUTES_GETTING minutes.
+    Filter items to only include those matching the exact monitoring source URL.
     """
-    flats_query = db.query(FlatRecord)
+    items_query = db.query(ItemRecord)
 
-    if task.last_got_flat:
-        flats_to_send = flats_query.filter(
-            FlatRecord.first_seen > task.last_got_flat,
-            FlatRecord.source_url == task.url
+    if task.last_got_item:
+        items_to_send = items_query.filter(
+            ItemRecord.first_seen > task.last_got_item,
+            ItemRecord.source_url == task.url
         ).all()
     else:
         time_threshold = now_warsaw() - timedelta(minutes=settings.DEFAULT_LAST_MINUTES_GETTING)
-        flats_to_send = flats_query.filter(
-            FlatRecord.first_seen > time_threshold,
-            FlatRecord.source_url == task.url
+        items_to_send = items_query.filter(
+            ItemRecord.first_seen > time_threshold,
+            ItemRecord.source_url == task.url
         ).all()
 
-    return flats_to_send
+    return items_to_send

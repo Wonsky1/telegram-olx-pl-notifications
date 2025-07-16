@@ -1,18 +1,19 @@
 services:
-  telegram-service:
-    image: wonsky/telegram-service:latest
+  service:
+    image: wonsky/olx-bot
     restart: unless-stopped
     env_file:
       - telegram.env
     depends_on:
       - postgres
 
-  telegram-service-worker:
-    image: wonsky/telegram-service-worker:latest
+  worker:
+    image: wonsky/olx-bot-worker
     restart: unless-stopped
     env_file:
       - worker.env
     depends_on:
+      - service
       - postgres
 
   postgres:
