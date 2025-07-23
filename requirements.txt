@@ -1,7 +1,6 @@
 aiogram
 python-dotenv
-sqlalchemy
-alembic
+olx-db-wonsky>=1.1.6
 pydantic-settings
 validators
 requests

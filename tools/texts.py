@@ -1,5 +1,5 @@
-import validators
 import requests
+import validators
 
 
 def is_valid_and_accessible(url: str) -> bool:
@@ -20,6 +20,7 @@ def get_link(text: str) -> str | None:
         return link
     except Exception:
         return None
+
 
 def get_valid_url(url: str, fallback_url: str) -> str:
     """Return the provided URL if valid and accessible, otherwise return the fallback URL."""

@@ -1,10 +1,9 @@
 """Define configuration settings using Pydantic and manage environment variables."""
 
-import os
 from logging import getLogger
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from dotenv import load_dotenv
 
+from dotenv import load_dotenv
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = getLogger(__name__)
 
@@ -21,12 +20,13 @@ class Settings(BaseSettings):
     BOT_TOKEN: str
     CHAT_IDS: str
 
-    DATABASE_URL: str
+    OLX_DB_URL: str
 
     URL: str
 
     DEFAULT_LAST_MINUTES_GETTING: int = 60
     DEFAULT_SENDING_FREQUENCY_MINUTES: float = 0.1
     CHECK_FREQUENCY_SECONDS: int = 10
+
 
 settings = Settings()
