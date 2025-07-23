@@ -136,5 +136,5 @@ def _format_item_text(item) -> str:  # type: ignore[annotation-unreachable]
     if rent := extra.get("rent_info"):
         text += f"💳 *{rent}* PLN\n"
 
-    text += f"🔗 [View on OLX]({item.link})"
+    text += f"🔗 [View on OLX]({item.item_url})"
     return text
