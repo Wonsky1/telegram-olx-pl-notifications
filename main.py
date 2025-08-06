@@ -2,10 +2,11 @@
 import asyncio
 import logging
 
+import redis.asyncio as redis
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.storage.redis import RedisStorage
 from olx_db import init_db
 
 from bot.fsm import StartMonitoringForm, StatusForm, StopMonitoringForm
@@ -31,7 +32,10 @@ logger = logging.getLogger(__name__)
 
 init_db()
 
-storage = MemoryStorage()
+redis_client = redis.Redis(
+    host=settings.REDIS_HOST, port=settings.REDIS_PORT, decode_responses=True
+)
+storage = RedisStorage(redis_client)
 dp = Dispatcher(storage=storage)
 
 

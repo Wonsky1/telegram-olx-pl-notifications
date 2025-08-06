@@ -32,5 +32,9 @@ class Settings(BaseSettings):
     DB_KEEP_DATA_DAYS: int = 7
     DB_REMOVE_OLD_ITEMS_DATA_N_DAYS: int = 7
 
+    # Redis settings for state persistence
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+
 
 settings = Settings()
