@@ -10,24 +10,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
 from typing import Final
 
-import pytz
 from aiogram import Bot
 
 from bot.responses import ITEMS_FOUND_CAPTION
 from services.monitoring import MonitoringService
 
 logger: Final = logging.getLogger(__name__)
-
-# Warsaw timezone – kept here to avoid coupling with ``main.py``
-WARSAW_TZ: Final = pytz.timezone("Europe/Warsaw")
-
-
-def _now_warsaw() -> datetime:
-    """Return current naive datetime in Europe/Warsaw timezone."""
-    return datetime.now(timezone.utc).astimezone(WARSAW_TZ).replace(tzinfo=None)
 
 
 class Notifier:  # noqa: D101 – simple name
@@ -67,7 +57,7 @@ class Notifier:  # noqa: D101 – simple name
 
             if not items_to_send:
                 # Mark that we *did* check – useful for monitoring dashboards
-                task.last_updated = _now_warsaw()
+                self._svc.update_last_updated(task)
                 continue
 
             # Notify user that N items were found
@@ -96,7 +86,7 @@ class Notifier:  # noqa: D101 – simple name
 
             # Persist bookkeeping timestamps
             self._svc.update_last_got_item(task.chat_id)
-            task.last_updated = _now_warsaw()
+            self._svc.update_last_updated(task)
 
 
 # ---------------------------- Formatting helpers -----------------------------

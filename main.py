@@ -81,6 +81,9 @@ async def telegram_main():
     # Start periodic check for new items
     logger.info("Starting periodic check for new items...")
     asyncio.create_task(notifier.run_periodically(settings.CHECK_FREQUENCY_SECONDS))
+    asyncio.create_task(
+        repo.remove_old_items_data_infinitely(settings.DB_REMOVE_OLD_ITEMS_DATA_N_DAYS)
+    )
 
     # Start polling
     logger.info("Starting bot polling...")

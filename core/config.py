@@ -28,5 +28,9 @@ class Settings(BaseSettings):
     DEFAULT_SENDING_FREQUENCY_MINUTES: float = 0.1
     CHECK_FREQUENCY_SECONDS: int = 10
 
+    # DB settings
+    DB_KEEP_DATA_DAYS: int = 7
+    DB_REMOVE_OLD_ITEMS_DATA_N_DAYS: int = 7
+
 
 settings = Settings()

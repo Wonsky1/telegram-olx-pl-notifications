@@ -90,3 +90,6 @@ class MonitoringService:  # noqa: D101 – simple name
 
     def update_last_got_item(self, chat_id: str) -> None:
         self._repo.update_last_got_item(chat_id)
+
+    def update_last_updated(self, task) -> None:
+        self._repo.update_last_updated(task)

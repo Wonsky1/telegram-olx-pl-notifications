@@ -8,6 +8,7 @@ future.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 from typing import Iterable, Protocol, Sequence
 
@@ -16,6 +17,7 @@ from typing import Iterable, Protocol, Sequence
 # and unit tests can monkey-patch it if required.
 from olx_db import MonitoringTask
 from olx_db import create_task as _create_task
+from olx_db import delete_items_older_than_n_days
 from olx_db import delete_task_by_chat_id as _delete_task_by_chat_id
 from olx_db import get_db as _get_db
 from olx_db import get_items_to_send_for_task as _get_items_to_send_for_task
@@ -24,10 +26,17 @@ from olx_db import get_task_by_chat_and_name as _get_task_by_chat_and_name
 from olx_db import get_tasks_by_chat_id as _get_tasks_by_chat_id
 from olx_db import update_last_got_item as _update_last_got_item
 
+from tools.datetime_utils import now_warsaw
+
 __all__ = [
     "MonitoringRepositoryProtocol",
     "MonitoringRepository",
 ]
+
+SECOND = 1
+MINUTE = 60 * SECOND
+HOUR = 60 * MINUTE
+DAY = 24 * HOUR
 
 
 class MonitoringRepositoryProtocol(Protocol):
@@ -60,6 +69,9 @@ class MonitoringRepositoryProtocol(Protocol):
 
     def update_last_got_item(self, chat_id: str) -> None:  # noqa: D401
         """Update `last_got_item` timestamp after sending items."""
+
+    def update_last_updated(self, task: MonitoringTask) -> None:  # noqa: D401
+        """Update `last_updated` timestamp after checking for items."""
 
 
 class MonitoringRepository(MonitoringRepositoryProtocol):
@@ -117,3 +129,17 @@ class MonitoringRepository(MonitoringRepositoryProtocol):
         with self._session() as db:
             _update_last_got_item(db, chat_id)
             db.commit()
+
+    def update_last_updated(self, task: MonitoringTask) -> None:  # noqa: D401
+        with self._session() as db:
+            # Get the specific task and update its last_updated field
+            db_task = _get_task_by_chat_and_name(db, task.chat_id, task.name)
+            if db_task:
+                db_task.last_updated = now_warsaw()
+                db.commit()
+
+    async def remove_old_items_data_infinitely(self, n_days: int) -> None:
+        while True:
+            with self._session() as db:
+                delete_items_older_than_n_days(db, n=n_days)
+            await asyncio.sleep(DAY)

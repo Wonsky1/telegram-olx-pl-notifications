@@ -1,6 +1,6 @@
 aiogram
 python-dotenv
-olx-db-wonsky>=1.1.6
+olx-db-wonsky
 pydantic-settings
 validators
 requests
