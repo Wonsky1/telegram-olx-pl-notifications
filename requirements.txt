@@ -1,10 +1,10 @@
 aiogram
 python-dotenv
-olx-db-wonsky
 pydantic-settings
 validators
 requests
 pytz
 redis
+httpx
 
 psycopg2-binary

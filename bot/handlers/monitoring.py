@@ -2,14 +2,6 @@ import logging
 
 from aiogram import types
 from aiogram.fsm.context import FSMContext
-from olx_db import (
-    MonitoringTask,
-    create_task,
-    delete_task_by_chat_id,
-    get_db,
-    get_task_by_chat_and_name,
-    get_tasks_by_chat_id,
-)
 
 from bot.fsm import StartMonitoringForm, StatusForm, StopMonitoringForm
 from bot.keyboards import (
@@ -36,6 +28,8 @@ from bot.responses import (
     UNKNOWN_MONITORING,
     URL_NOT_REACHABLE,
 )
+from core.dependencies import get_monitoring_service
+from services.monitoring import MonitoringSpec
 from services.validator import UrlValidator
 
 logger = logging.getLogger(__name__)
@@ -51,29 +45,39 @@ async def cmd_start_monitoring(message: types.Message, state: FSMContext):
 
 
 async def process_url(message: types.Message, state: FSMContext):
+    # Get the monitoring service from singleton container
+    monitoring_service = get_monitoring_service()
     validator = UrlValidator()
+
     if message.text.strip() == BACK_BUTTON.text:
         await message.answer(BACK_TO_MENU, reply_markup=MAIN_MENU_KEYBOARD)
         await state.clear()
         return
+
     url = message.text.strip()
     if not validator.is_supported(url):
         await message.answer(INVALID_URL)
         return
+
     url = validator.normalize(url)
     if not validator.is_supported(url):
         await message.answer(INVALID_URL)
         return
-    if not validator.is_reachable(url):
+
+    if not await validator.is_reachable(url):
         await message.answer(URL_NOT_REACHABLE)
         return
-    db = next(get_db())
+
+    # Check if URL is already monitored using the service
     try:
-        if MonitoringTask.has_url_for_chat(db, str(message.chat.id), url):
+        if await monitoring_service._repo.has_url(str(message.chat.id), url):
             await message.answer(DUPLICATE_URL)
             return
-    finally:
-        db.close()
+    except Exception as e:
+        logger.error(f"Error checking URL duplicate: {e}")
+        await message.answer(ERROR_CREATING)
+        return
+
     await state.update_data(url=url)
     await state.set_state(StartMonitoringForm.name)
     kb = types.ReplyKeyboardMarkup(keyboard=[[BACK_BUTTON]], resize_keyboard=True)
@@ -81,38 +85,50 @@ async def process_url(message: types.Message, state: FSMContext):
 
 
 async def process_name(message: types.Message, state: FSMContext):
-    validator = UrlValidator()
+    # Get the monitoring service from singleton container
+    monitoring_service = get_monitoring_service()
+
     if message.text.strip() == BACK_BUTTON.text:
         await message.answer(BACK_TO_MENU, reply_markup=MAIN_MENU_KEYBOARD)
         await state.clear()
         return
+
     name = message.text.strip()
     if len(name) == 0 or len(name) > 64:
         await message.answer(INVALID_NAME)
         return
+
     data = await state.get_data()
-    url = validator.normalize(data["url"])
-    db = next(get_db())
+    url = data["url"]
+
     try:
-        existing = get_task_by_chat_and_name(db, str(message.chat.id), name)
-        if existing:
-            await message.answer(DUPLICATE_NAME)
-            return
-        if MonitoringTask.has_url_for_chat(db, str(message.chat.id), url):
-            await message.answer(DUPLICATE_URL)
-            return
-        create_task(db, str(message.chat.id), name, url)
+        # Create monitoring spec and add it using the service
+        spec = MonitoringSpec(chat_id=str(message.chat.id), name=name, url=url)
+        await monitoring_service.add_monitoring(spec)
+
         logger.info(f"Monitoring '{name}' created for chat_id {message.chat.id}")
         await message.answer(
             MONITORING_CREATED.format(name=name, url=url),
             parse_mode="Markdown",
             reply_markup=MAIN_MENU_KEYBOARD,
         )
+    except ValueError as e:
+        # Handle validation errors from the service
+        error_msg = str(e)
+        if "Duplicate URL" in error_msg:
+            await message.answer(DUPLICATE_URL)
+        elif "Duplicate name" in error_msg:
+            await message.answer(DUPLICATE_NAME)
+        elif "Unsupported URL" in error_msg:
+            await message.answer(INVALID_URL)
+        elif "URL not reachable" in error_msg:
+            await message.answer(URL_NOT_REACHABLE)
+        else:
+            await message.answer(INVALID_NAME)
     except Exception as e:
         logger.error(f"Error creating monitoring: {e}", exc_info=True)
         await message.answer(ERROR_CREATING)
-    finally:
-        db.close()
+
     await state.clear()
 
 
@@ -121,9 +137,10 @@ async def process_name(message: types.Message, state: FSMContext):
 
 async def stop_monitoring_command(message: types.Message, state: FSMContext):
     """Ask user which monitoring to stop."""
-    db = next(get_db())
+    monitoring_service = get_monitoring_service()
+
     try:
-        tasks = get_tasks_by_chat_id(db, str(message.chat.id))
+        tasks = await monitoring_service.list_monitorings(str(message.chat.id))
         if not tasks:
             await message.answer(
                 "📋 *No active monitoring found*\n\nYou don't have any monitoring tasks set up.\nStart your monitoring to begin monitoring.",
@@ -133,36 +150,44 @@ async def stop_monitoring_command(message: types.Message, state: FSMContext):
         kb = get_monitoring_selection_keyboard([t.name for t in tasks])
         await message.answer("Choose monitoring to stop:", reply_markup=kb)
         await state.set_state(StopMonitoringForm.choosing)
-    finally:
-        db.close()
+    except Exception as e:
+        logger.error(f"Error listing tasks for stop: {e}")
+        await message.answer(ERROR_STOP)
 
 
 async def process_stop_choice(message: types.Message, state: FSMContext):
     """Handle user's selection and delete monitoring."""
+    monitoring_service = get_monitoring_service()
+
     name = message.text.strip()
     if name == BACK_BUTTON.text:
         # Go back to main menu
         await message.answer("Back to main menu", reply_markup=MAIN_MENU_KEYBOARD)
         await state.clear()
         return
+
     # Prevent stopping reserved names
     if name.startswith("/"):
         await message.answer(RESERVED_NAME)
         return
-    db = next(get_db())
+
     try:
-        delete_task_by_chat_id(db, str(message.chat.id), name)
+        await monitoring_service.remove_monitoring(str(message.chat.id), name)
         logger.info(f"Monitoring '{name}' deleted for chat_id {message.chat.id}")
         await message.answer(
             STOPPED.format(name=name),
             parse_mode="Markdown",
             reply_markup=MAIN_MENU_KEYBOARD,
         )
-    except Exception:
-        logger.error("Error deleting monitoring", exc_info=True)
+    except ValueError as e:
+        if "not found" in str(e).lower():
+            await message.answer(UNKNOWN_MONITORING)
+        else:
+            await message.answer(ERROR_STOP)
+    except Exception as e:
+        logger.error(f"Error deleting monitoring: {e}", exc_info=True)
         await message.answer(ERROR_STOP)
-    finally:
-        db.close()
+
     await state.clear()
 
 
@@ -171,39 +196,48 @@ async def process_stop_choice(message: types.Message, state: FSMContext):
 
 async def status_command(message: types.Message, state: FSMContext):
     """Show status or ask user to choose if multiple monitorings."""
-    db = next(get_db())
+    monitoring_service = get_monitoring_service()
+
     try:
-        tasks = get_tasks_by_chat_id(db, str(message.chat.id))
+        tasks = await monitoring_service.list_monitorings(str(message.chat.id))
         if not tasks:
             await message.answer(NO_MONITORINGS, parse_mode="Markdown")
             return
+
         if len(tasks) == 1:
             await _send_status(message, tasks[0])
         else:
             kb = get_monitoring_selection_keyboard([t.name for t in tasks])
             await message.answer(CHOOSE_MONITORING, reply_markup=kb)
             await state.set_state(StatusForm.choosing)
-    finally:
-        db.close()
+    except Exception as e:
+        logger.error(f"Error getting status: {e}")
+        await message.answer("Error retrieving monitoring status.")
 
 
 async def process_status_choice(message: types.Message, state: FSMContext):
+    monitoring_service = get_monitoring_service()
+
     name = message.text.strip()
     if name == BACK_BUTTON.text:
         await message.answer("Back to main menu", reply_markup=MAIN_MENU_KEYBOARD)
         await state.clear()
         return
-    db = next(get_db())
+
     try:
-        task = get_task_by_chat_and_name(db, str(message.chat.id), name)
+        tasks = await monitoring_service.list_monitorings(str(message.chat.id))
+        task = next((t for t in tasks if t.name == name), None)
+
         if task:
             await _send_status(message, task)
             await message.answer(MAIN_MENU, reply_markup=MAIN_MENU_KEYBOARD)
         else:
             await message.answer(UNKNOWN_MONITORING)
             return
-    finally:
-        db.close()
+    except Exception as e:
+        logger.error(f"Error getting task status: {e}")
+        await message.answer("Error retrieving monitoring status.")
+
     await state.clear()
 
 
@@ -212,12 +246,25 @@ async def _send_status(message: types.Message, task):
         f"✅ *Monitoring is ACTIVE*\n\n"
         f"📛 *Name:* {task.name}\n"
         f"🔗 *URL:* [View link]({task.url})\n"
-        f"🕒 *Last updated:* {task.last_updated.strftime('%Y-%m-%d %H:%M:%S')}\n"
     )
-    if task.last_got_item:
+
+    # Handle datetime formatting safely
+    if hasattr(task.last_updated, "strftime"):
+        status_text += (
+            f"🕒 *Last updated:* {task.last_updated.strftime('%Y-%m-%d %H:%M:%S')}\n"
+        )
+    elif task.last_updated:
+        status_text += f"🕒 *Last updated:* {task.last_updated}\n"
+    else:
+        status_text += f"🕒 *Last updated:* Never\n"
+
+    if hasattr(task.last_got_item, "strftime") and task.last_got_item:
         status_text += (
             f"📦 *Last item sent:* {task.last_got_item.strftime('%Y-%m-%d %H:%M:%S')}\n"
         )
+    elif task.last_got_item:
+        status_text += f"📦 *Last item sent:* {task.last_got_item}\n"
     else:
         status_text += f"📦 *Last item sent:* Never\n"
+
     await message.answer(status_text, parse_mode="Markdown")

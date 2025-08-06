@@ -45,10 +45,10 @@ class Notifier:  # noqa: D101 – simple name
     # ------------------------------------------------------------------
     async def _check_and_send_items(self) -> None:  # noqa: D401 – simple name
         """Check for new items and notify users."""
-        pending_tasks = self._svc.pending_tasks()
+        pending_tasks = await self._svc.pending_tasks()
 
         for task in pending_tasks:
-            items_to_send = self._svc.items_to_send(task)
+            items_to_send = await self._svc.items_to_send(task)
             logger.info(
                 "Found %d items to send for chat_id %s",
                 len(items_to_send),
@@ -57,7 +57,7 @@ class Notifier:  # noqa: D101 – simple name
 
             if not items_to_send:
                 # Mark that we *did* check – useful for monitoring dashboards
-                self._svc.update_last_updated(task)
+                await self._svc.update_last_updated(task)
                 continue
 
             # Notify user that N items were found
@@ -71,10 +71,16 @@ class Notifier:  # noqa: D101 – simple name
 
             for item in reversed(items_to_send):
                 text = _format_item_text(item)
-                if item.image_url:
+                # Handle both dict and object access patterns for image_url
+                image_url = (
+                    item.get("image_url")
+                    if isinstance(item, dict)
+                    else getattr(item, "image_url", None)
+                )
+                if image_url:
                     await self._bot.send_photo(
                         chat_id=task.chat_id,
-                        photo=item.image_url,
+                        photo=image_url,
                         caption=text,
                         parse_mode="Markdown",
                     )
@@ -85,8 +91,8 @@ class Notifier:  # noqa: D101 – simple name
                 await asyncio.sleep(0.5)  # prevent Telegram Flood-wait
 
             # Persist bookkeeping timestamps
-            self._svc.update_last_got_item(task.chat_id)
-            self._svc.update_last_updated(task)
+            await self._svc.update_last_got_item(task.chat_id)
+            await self._svc.update_last_updated(task)
 
 
 # ---------------------------- Formatting helpers -----------------------------
@@ -94,7 +100,13 @@ class Notifier:  # noqa: D101 – simple name
 
 def _format_item_text(item) -> str:  # type: ignore[annotation-unreachable]
     """Return Markdown-formatted text for *item* compatible with Telegram."""
-    desc_lines = item.description.strip().split("\n")
+    # Handle both dict and object access patterns
+    description = (
+        item.get("description", "")
+        if isinstance(item, dict)
+        else getattr(item, "description", "")
+    )
+    desc_lines = description.strip().split("\n")
     extra = {}
     for line in desc_lines:
         if line.startswith("price:"):
@@ -110,11 +122,38 @@ def _format_item_text(item) -> str:  # type: ignore[annotation-unreachable]
         elif line.startswith("rent:"):
             extra["rent_info"] = line.replace("rent:", "Additional rent:").strip()
 
+    # Extract item fields with dict/object compatibility
+    title = (
+        item.get("title", "No title")
+        if isinstance(item, dict)
+        else getattr(item, "title", "No title")
+    )
+    price = (
+        item.get("price", "N/A")
+        if isinstance(item, dict)
+        else getattr(item, "price", "N/A")
+    )
+    location = (
+        item.get("location", "N/A")
+        if isinstance(item, dict)
+        else getattr(item, "location", "N/A")
+    )
+    created_at_pretty = (
+        item.get("created_at_pretty", "N/A")
+        if isinstance(item, dict)
+        else getattr(item, "created_at_pretty", "N/A")
+    )
+    item_url = (
+        item.get("item_url", "#")
+        if isinstance(item, dict)
+        else getattr(item, "item_url", "#")
+    )
+
     text = (
-        f"📦 *{item.title}*\n\n"
-        f"💰 *Price:* {item.price}\n"
-        f"📍 *Location:* {item.location}\n"
-        f"🕒 *Posted:* {item.created_at_pretty}\n"
+        f"📦 *{title}*\n\n"
+        f"💰 *Price:* {price}\n"
+        f"📍 *Location:* {location}\n"
+        f"🕒 *Posted:* {created_at_pretty}\n"
     )
     # Optional extras
     if price := extra.get("price_info"):
@@ -126,5 +165,5 @@ def _format_item_text(item) -> str:  # type: ignore[annotation-unreachable]
     if rent := extra.get("rent_info"):
         text += f"💳 *{rent}* PLN\n"
 
-    text += f"🔗 [View on OLX]({item.item_url})"
+    text += f"🔗 [View on OLX]({item_url})"
     return text

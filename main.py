@@ -7,18 +7,15 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.redis import RedisStorage
-from olx_db import init_db
 
 from bot.fsm import StartMonitoringForm, StatusForm, StopMonitoringForm
 from bot.handlers import monitoring as monitoring_handlers
 from bot.keyboards import MAIN_MENU_KEYBOARD
 from core.config import settings
+from core.dependencies import get_monitoring_service, get_repository
 
 # Dependency injection – business & infrastructure layers
-from repositories.monitoring import MonitoringRepository
-from services.monitoring import MonitoringService
 from services.notifier import Notifier
-from services.validator import UrlValidator
 
 logging.basicConfig(
     level=logging.INFO,
@@ -29,8 +26,6 @@ logging.basicConfig(
     ],
 )
 logger = logging.getLogger(__name__)
-
-init_db()
 
 redis_client = redis.Redis(
     host=settings.REDIS_HOST, port=settings.REDIS_PORT, decode_responses=True
@@ -44,10 +39,9 @@ async def telegram_main():
     logger.info("Initializing bot")
     bot = Bot(token=settings.BOT_TOKEN)
 
-    # Wire domain services
-    repo = MonitoringRepository()
-    validator = UrlValidator()
-    mon_service = MonitoringService(repo, validator)
+    # Get services from singleton container
+    mon_service = get_monitoring_service()
+    repo = get_repository()
     notifier = Notifier(bot, mon_service)
 
     # Register FSM handlers

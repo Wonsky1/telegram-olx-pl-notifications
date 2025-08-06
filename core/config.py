@@ -20,16 +20,11 @@ class Settings(BaseSettings):
     BOT_TOKEN: str
     CHAT_IDS: str
 
-    OLX_DB_URL: str
-
-    URL: str
-
-    DEFAULT_LAST_MINUTES_GETTING: int = 60
-    DEFAULT_SENDING_FREQUENCY_MINUTES: float = 0.1
     CHECK_FREQUENCY_SECONDS: int = 10
 
+    TOPN_DB_BASE_URL: str
+
     # DB settings
-    DB_KEEP_DATA_DAYS: int = 7
     DB_REMOVE_OLD_ITEMS_DATA_N_DAYS: int = 7
 
     # Redis settings for state persistence

@@ -40,7 +40,7 @@ class MonitoringService:  # noqa: D101 – simple name
         self._validator = validator
 
     # ---------------- Public API used by Telegram handlers ----------------
-    def add_monitoring(self, spec: MonitoringSpec) -> None:
+    async def add_monitoring(self, spec: MonitoringSpec) -> None:
         """Validate and persist a new monitoring task.
 
         Raises ValueError with descriptive message if validation fails so that
@@ -57,39 +57,39 @@ class MonitoringService:  # noqa: D101 – simple name
         if not self._validator.is_supported(url):
             raise ValueError("Unsupported URL.")
         url = self._validator.normalize(url)
-        if not self._validator.is_reachable(url):
+        if not await self._validator.is_reachable(url):
             raise ValueError("URL not reachable.")
         # Check duplicates
-        if self._repo.has_url(spec.chat_id, url):
+        if await self._repo.has_url(spec.chat_id, url):
             raise ValueError("Duplicate URL for this chat.")
-        if self._repo.task_exists(spec.chat_id, name):
+        if await self._repo.task_exists(spec.chat_id, name):
             raise ValueError("Duplicate name for this chat.")
         # Everything OK → persist
-        self._repo.create_task(spec.chat_id, name, url)
+        await self._repo.create_task(spec.chat_id, name, url)
         logger.info("Monitoring '%s' created for chat_id %s", name, spec.chat_id)
 
-    def remove_monitoring(self, chat_id: str, name: str) -> None:
+    async def remove_monitoring(self, chat_id: str, name: str) -> None:
         """Delete monitoring task.
 
         Raises ValueError if it does not exist so that UI can respond.
         """
-        if not self._repo.task_exists(chat_id, name):
+        if not await self._repo.task_exists(chat_id, name):
             raise ValueError("Monitoring not found.")
-        self._repo.delete_task(chat_id, name)
+        await self._repo.delete_task(chat_id, name)
         logger.info("Monitoring '%s' deleted for chat_id %s", name, chat_id)
 
-    def list_monitorings(self, chat_id: str):  # -> Sequence[MonitoringTask]
-        return self._repo.list_tasks(chat_id)
+    async def list_monitorings(self, chat_id: str):  # -> Sequence[MonitoringTask]
+        return await self._repo.list_tasks(chat_id)
 
     # ---------------- Background-worker helpers (pass-through) ----------------
-    def pending_tasks(self):
-        return self._repo.pending_tasks()
+    async def pending_tasks(self):
+        return await self._repo.pending_tasks()
 
-    def items_to_send(self, task):
-        return self._repo.items_to_send(task)
+    async def items_to_send(self, task):
+        return await self._repo.items_to_send(task)
 
-    def update_last_got_item(self, chat_id: str) -> None:
-        self._repo.update_last_got_item(chat_id)
+    async def update_last_got_item(self, chat_id: str) -> None:
+        await self._repo.update_last_got_item(chat_id)
 
-    def update_last_updated(self, task) -> None:
-        self._repo.update_last_updated(task)
+    async def update_last_updated(self, task) -> None:
+        await self._repo.update_last_updated(task)

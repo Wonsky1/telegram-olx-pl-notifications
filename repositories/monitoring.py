@@ -1,31 +1,18 @@
 """Persistence layer for monitoring tasks.
 
-Wraps existing helper functions from ``olx_db`` so that the rest of the codebase
-can depend on an abstraction instead of concrete DB helpers.  This makes it
-straight-forward to swap out the storage mechanism or migrate the schema in the
-future.
+Uses the TopnDbClient to communicate with the OLX Database API instead of
+direct database connections. This provides better separation of concerns
+and makes the codebase more maintainable.
 """
 
 from __future__ import annotations
 
 import asyncio
-import contextlib
-from typing import Iterable, Protocol, Sequence
+import logging
+from typing import Any, Dict, Iterable, Protocol, Sequence
 
-# The existing DB helper module that the current code already relies on.
-# We keep the import here so that type-checkers have a chance to see symbols,
-# and unit tests can monkey-patch it if required.
-from olx_db import MonitoringTask
-from olx_db import create_task as _create_task
-from olx_db import delete_items_older_than_n_days
-from olx_db import delete_task_by_chat_id as _delete_task_by_chat_id
-from olx_db import get_db as _get_db
-from olx_db import get_items_to_send_for_task as _get_items_to_send_for_task
-from olx_db import get_pending_tasks as _get_pending_tasks
-from olx_db import get_task_by_chat_and_name as _get_task_by_chat_and_name
-from olx_db import get_tasks_by_chat_id as _get_tasks_by_chat_id
-from olx_db import update_last_got_item as _update_last_got_item
-
+from clients import topn_db_client
+from clients.topn_db_client import TopnDbClient
 from tools.datetime_utils import now_warsaw
 
 __all__ = [
@@ -43,103 +30,161 @@ class MonitoringRepositoryProtocol(Protocol):
     """Abstract interface for monitoring persistence."""
 
     # --- CRUD & queries used by the bot ---
-    def task_exists(self, chat_id: str, name: str) -> bool:  # noqa: D401 – simple name
+    async def task_exists(
+        self, chat_id: str, name: str
+    ) -> bool:  # noqa: D401 – simple name
         """Return True if a task with *name* exists for *chat_id*."""
 
-    def has_url(self, chat_id: str, url: str) -> bool:  # noqa: D401
+    async def has_url(self, chat_id: str, url: str) -> bool:  # noqa: D401
         """Return True if the *url* is already monitored for *chat_id*."""
 
-    def create_task(
+    async def create_task(
         self, chat_id: str, name: str, url: str
     ) -> MonitoringTask:  # noqa: D401
         """Persist a new monitoring task and return the model instance."""
 
-    def delete_task(self, chat_id: str, name: str) -> None:
+    async def delete_task(self, chat_id: str, name: str) -> None:
         """Delete monitoring task identified by *name* for the given chat."""
 
-    def list_tasks(self, chat_id: str) -> Sequence[MonitoringTask]:  # noqa: D401
+    async def list_tasks(self, chat_id: str) -> Sequence[MonitoringTask]:  # noqa: D401
         """Return all monitoring tasks for *chat_id*."""
 
     # --- Used by background worker ---
-    def pending_tasks(self) -> Iterable[MonitoringTask]:  # noqa: D401
+    async def pending_tasks(self) -> Iterable[MonitoringTask]:  # noqa: D401
         """Return tasks that need to be checked for new items."""
 
-    def items_to_send(self, task: MonitoringTask):  # noqa: D401
+    async def items_to_send(self, task: MonitoringTask):  # noqa: D401
         """Return new items that should be sent for *task*."""
 
-    def update_last_got_item(self, chat_id: str) -> None:  # noqa: D401
+    async def update_last_got_item(self, chat_id: str) -> None:  # noqa: D401
         """Update `last_got_item` timestamp after sending items."""
 
-    def update_last_updated(self, task: MonitoringTask) -> None:  # noqa: D401
+    async def update_last_updated(self, task: MonitoringTask) -> None:  # noqa: D401
         """Update `last_updated` timestamp after checking for items."""
 
 
-class MonitoringRepository(MonitoringRepositoryProtocol):
-    """SQLAlchemy-backed implementation delegating to existing helpers."""
+# Simple data class to represent MonitoringTask since we're moving away from ORM
+class MonitoringTask:
+    """Represents a monitoring task."""
 
-    def __init__(self):
-        # Nothing to initialise now – we rely on the global get_db() factory.
-        pass
+    def __init__(self, data: Dict[str, Any]):
+        self.id = data.get("id")
+        self.chat_id = data.get("chat_id")
+        self.name = data.get("name")
+        self.url = data.get("url")
+        self.last_updated = data.get("last_updated")
+        self.last_got_item = data.get("last_got_item")
+        self.created_at = data.get("created_at")
+        self.is_active = data.get("is_active", True)
 
-    # Internal context manager to acquire / release DB sessions conveniently.
-    @contextlib.contextmanager
-    def _session(self):
-        db = next(_get_db())
+    @staticmethod
+    async def has_url_for_chat(client: TopnDbClient, chat_id: str, url: str) -> bool:
+        """Check if URL is already monitored for the given chat."""
         try:
-            yield db
-        finally:
-            db.close()
+            tasks_response = await client.get_tasks_by_chat_id(chat_id)
+            tasks = tasks_response.get("tasks", [])
+            return any(task.get("url") == url for task in tasks)
+        except Exception:
+            return False
+
+
+class MonitoringRepository(MonitoringRepositoryProtocol):
+    """Client-backed implementation using TopnDbClient for API communication."""
+
+    def __init__(self, client: TopnDbClient = None):
+        self._client = client or topn_db_client
+        self._logger = logging.getLogger(__name__)
 
     # ----------------- CRUD wrappers -----------------
-    def task_exists(self, chat_id: str, name: str) -> bool:  # noqa: D401
-        with self._session() as db:
-            return _get_task_by_chat_and_name(db, chat_id, name) is not None
+    async def task_exists(self, chat_id: str, name: str) -> bool:  # noqa: D401
+        """Return True if a task with *name* exists for *chat_id*."""
+        try:
+            tasks_response = await self._client.get_tasks_by_chat_id(chat_id)
+            tasks = tasks_response.get("tasks", [])
+            return any(task.get("name") == name for task in tasks)
+        except Exception as e:
+            self._logger.error(f"Error checking if task exists: {e}")
+            return False
 
-    def has_url(self, chat_id: str, url: str) -> bool:  # noqa: D401
-        with self._session() as db:
-            return MonitoringTask.has_url_for_chat(db, chat_id, url)
+    async def has_url(self, chat_id: str, url: str) -> bool:  # noqa: D401
+        """Return True if the *url* is already monitored for *chat_id*."""
+        return await MonitoringTask.has_url_for_chat(self._client, chat_id, url)
 
-    def create_task(
+    async def create_task(
         self, chat_id: str, name: str, url: str
     ) -> MonitoringTask:  # noqa: D401
-        with self._session() as db:
-            task = _create_task(db, chat_id, name, url)
-            db.commit()
-            return task
+        """Persist a new monitoring task and return the model instance."""
+        task_data = {"chat_id": chat_id, "name": name, "url": url, "is_active": True}
+        try:
+            response = await self._client.create_task(task_data)
+            return MonitoringTask(response.get("task", response))
+        except Exception as e:
+            self._logger.error(f"Error creating task: {e}")
+            raise
 
-    def delete_task(self, chat_id: str, name: str) -> None:
-        with self._session() as db:
-            _delete_task_by_chat_id(db, chat_id, name)
-            db.commit()
+    async def delete_task(self, chat_id: str, name: str) -> None:
+        """Delete monitoring task identified by *name* for the given chat."""
+        try:
+            await self._client.delete_tasks_by_chat_id(chat_id, name)
+        except Exception as e:
+            self._logger.error(f"Error deleting task: {e}")
+            raise
 
-    def list_tasks(self, chat_id: str):  # noqa: D401
-        with self._session() as db:
-            return list(_get_tasks_by_chat_id(db, chat_id))
+    async def list_tasks(self, chat_id: str) -> Sequence[MonitoringTask]:  # noqa: D401
+        """Return all monitoring tasks for *chat_id*."""
+        try:
+            response = await self._client.get_tasks_by_chat_id(chat_id)
+            tasks_data = response.get("tasks", [])
+            return [MonitoringTask(task_data) for task_data in tasks_data]
+        except Exception as e:
+            self._logger.error(f"Error listing tasks: {e}")
+            return []
 
     # ----------------- Background / worker helpers -----------------
-    def pending_tasks(self):  # noqa: D401
-        with self._session() as db:
-            return list(_get_pending_tasks(db))
+    async def pending_tasks(self) -> Iterable[MonitoringTask]:  # noqa: D401
+        """Return tasks that need to be checked for new items."""
+        try:
+            response = await self._client.get_pending_tasks()
+            tasks_data = response.get("tasks", [])
+            return [MonitoringTask(task_data) for task_data in tasks_data]
+        except Exception as e:
+            self._logger.error(f"Error getting pending tasks: {e}")
+            return []
 
-    def items_to_send(self, task: MonitoringTask):  # noqa: D401
-        with self._session() as db:
-            return list(_get_items_to_send_for_task(db, task))
+    async def items_to_send(self, task: MonitoringTask):  # noqa: D401
+        """Return new items that should be sent for *task*."""
+        try:
+            response = await self._client.get_items_to_send_for_task(task.id)
+            return response.get("items", [])
+        except Exception as e:
+            self._logger.error(f"Error getting items to send: {e}")
+            return []
 
-    def update_last_got_item(self, chat_id: str) -> None:  # noqa: D401
-        with self._session() as db:
-            _update_last_got_item(db, chat_id)
-            db.commit()
+    async def update_last_got_item(self, chat_id: str) -> None:  # noqa: D401
+        """Update `last_got_item` timestamp after sending items."""
+        try:
+            # Find the task by chat_id first, then update
+            tasks = await self.list_tasks(chat_id)
+            for task in tasks:
+                await self._client.update_last_got_item_timestamp(task.id)
+        except Exception as e:
+            self._logger.error(f"Error updating last_got_item: {e}")
 
-    def update_last_updated(self, task: MonitoringTask) -> None:  # noqa: D401
-        with self._session() as db:
-            # Get the specific task and update its last_updated field
-            db_task = _get_task_by_chat_and_name(db, task.chat_id, task.name)
-            if db_task:
-                db_task.last_updated = now_warsaw()
-                db.commit()
+    async def update_last_updated(self, task: MonitoringTask) -> None:  # noqa: D401
+        """Update `last_updated` timestamp after checking for items."""
+        try:
+            # Update the task with current timestamp
+            task_data = {"last_updated": now_warsaw().isoformat()}
+            await self._client.update_task(task.id, task_data)
+        except Exception as e:
+            self._logger.error(f"Error updating last_updated: {e}")
 
     async def remove_old_items_data_infinitely(self, n_days: int) -> None:
+        """Remove old items data in an infinite loop."""
         while True:
-            with self._session() as db:
-                delete_items_older_than_n_days(db, n=n_days)
+            try:
+                await self._client.delete_old_items(n_days)
+                self._logger.info(f"Cleaned up items older than {n_days} days")
+            except Exception as e:
+                self._logger.error(f"Error cleaning up old items: {e}")
             await asyncio.sleep(DAY)

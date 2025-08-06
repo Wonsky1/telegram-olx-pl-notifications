@@ -25,7 +25,7 @@ class UrlValidatorProtocol(Protocol):
     def normalize(self, url: str) -> str:
         """Return canonical version of the supported URL."""
 
-    def is_reachable(self, url: str) -> bool:
+    async def is_reachable(self, url: str) -> bool:
         """Return True if remote host returns 2xx."""
 
 
@@ -59,5 +59,5 @@ class UrlValidator(UrlValidatorProtocol):
             url = urllib.parse.urlunparse(parsed._replace(query=query))
         return url
 
-    def is_reachable(self, url: str) -> bool:  # noqa: D401 – simple name
-        return is_valid_and_accessible(url)
+    async def is_reachable(self, url: str) -> bool:  # noqa: D401 – simple name
+        return await is_valid_and_accessible(url)

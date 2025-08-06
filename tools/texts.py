@@ -1,16 +1,22 @@
-import requests
-import validators
+import httpx
 
 
-def is_valid_and_accessible(url: str) -> bool:
+async def is_valid_and_accessible(url: str) -> bool:
     """Check if a URL is valid and returns a successful response."""
-    if not validators.url(url):
-        return False
-
     try:
-        response = requests.get(url)
-        return response.status_code == 200
-    except requests.RequestException:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+        }
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, headers=headers, timeout=10.0)
+            response.raise_for_status()
+            return response.status_code == 200
+    except (httpx.RequestError, httpx.HTTPStatusError):
         return False
 
 
