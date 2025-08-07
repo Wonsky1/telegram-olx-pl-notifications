@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 
 from aiogram import types
 from aiogram.fsm.context import FSMContext
@@ -249,22 +250,26 @@ async def _send_status(message: types.Message, task):
     )
 
     # Handle datetime formatting safely
-    if hasattr(task.last_updated, "strftime"):
-        status_text += (
-            f"🕒 *Last updated:* {task.last_updated.strftime('%Y-%m-%d %H:%M:%S')}\n"
-        )
-    elif task.last_updated:
-        status_text += f"🕒 *Last updated:* {task.last_updated}\n"
-    else:
-        status_text += f"🕒 *Last updated:* Never\n"
+    def format_datetime(dt_value):
+        if not dt_value:
+            return "Never"
 
-    if hasattr(task.last_got_item, "strftime") and task.last_got_item:
-        status_text += (
-            f"📦 *Last item sent:* {task.last_got_item.strftime('%Y-%m-%d %H:%M:%S')}\n"
-        )
-    elif task.last_got_item:
-        status_text += f"📦 *Last item sent:* {task.last_got_item}\n"
-    else:
-        status_text += f"📦 *Last item sent:* Never\n"
+        # If it's already a datetime object
+        if hasattr(dt_value, "strftime"):
+            return dt_value.strftime("%Y-%m-%d %H:%M:%S")
+
+        # If it's an ISO string, parse it
+        if isinstance(dt_value, str):
+            try:
+                # Parse ISO format string
+                dt = datetime.fromisoformat(dt_value.replace("Z", "+00:00"))
+                return dt.strftime("%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                return str(dt_value)
+
+        return str(dt_value)
+
+    status_text += f"🕒 *Last updated:* {format_datetime(task.last_updated)}\n"
+    status_text += f"📦 *Last item sent:* {format_datetime(task.last_got_item)}\n"
 
     await message.answer(status_text, parse_mode="Markdown")

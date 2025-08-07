@@ -148,6 +148,9 @@ def _format_item_text(item) -> str:  # type: ignore[annotation-unreachable]
         if isinstance(item, dict)
         else getattr(item, "item_url", "#")
     )
+    source = (
+        item.get("source") if isinstance(item, dict) else getattr(item, "source", None)
+    )
 
     text = (
         f"📦 *{title}*\n\n"
@@ -165,5 +168,6 @@ def _format_item_text(item) -> str:  # type: ignore[annotation-unreachable]
     if rent := extra.get("rent_info"):
         text += f"💳 *{rent}* PLN\n"
 
-    text += f"🔗 [View on OLX]({item_url})"
+    platform_name = source if source else "Unknown source"
+    text += f"🔗 [View on {platform_name}]({item_url})"
     return text
