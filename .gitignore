@@ -166,3 +166,4 @@ dev.env
 telegram.env
 worker.env
 migrations.env
+db_service.env

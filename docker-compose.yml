@@ -1,17 +1,22 @@
 services:
-  migrations:
-    image: wonsky/olx-bot-migrations
+  db-service:
+    image: wonsky/topn-db
+    restart: unless-stopped
     env_file:
-      - migrations.env
+      - db_service.env
     depends_on:
       postgres:
         condition: service_healthy
-    command: python /app/scripts/run_migrations.py migrate
+      redis:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "/app/scripts/run_migrations.py", "migrate"]
-      interval: 30s
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://0.0.0.0:8000/health')"]
+      interval: 120s
       timeout: 10s
       retries: 5
+      start_period: 10s
+    ports:
+      - ${DB_SERVICE_PORT:-8000}:8000
 
   service:
     image: wonsky/olx-bot
@@ -19,11 +24,7 @@ services:
     env_file:
       - telegram.env
     depends_on:
-      migrations:
-        condition: service_completed_successfully
-      postgres:
-        condition: service_healthy
-      redis:
+      db-service:
         condition: service_healthy
 
   worker:
@@ -32,9 +33,7 @@ services:
     env_file:
       - worker.env
     depends_on:
-      migrations:
-        condition: service_completed_successfully
-      postgres:
+      db-service:
         condition: service_healthy
 
   postgres:

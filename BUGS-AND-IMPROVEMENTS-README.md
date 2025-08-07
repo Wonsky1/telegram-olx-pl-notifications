@@ -1,7 +1,6 @@
 # Prioritized Improvements & Bugs
 
 Below is the recommended order for tackling improvements and bug fixes. Each item is listed by priority (highest first):
-1. Move db into separate fastapi service
 3. Add automated tests
    Enables safe refactoring and reliable deployments.
 4. Introduce a staging flow
