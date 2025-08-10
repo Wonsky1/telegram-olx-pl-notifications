@@ -37,10 +37,8 @@ jobs:
             --cov-fail-under=60 \
             --junitxml=junit.xml -o junit_family=legacy
         env:
-          BOT_TOKEN="some_token"
-          CHAT_IDS=111
-          REDIS_HOST="host"
-          REDIS_PORT=111
-          TOPN_DB_BASE_URL=http://host:111
-
-
+          BOT_TOKEN: "some_token"
+          CHAT_IDS: 111
+          REDIS_HOST: "host"
+          REDIS_PORT: 111
+          TOPN_DB_BASE_URL: "http://host:111"
