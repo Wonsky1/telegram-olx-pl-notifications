@@ -16,7 +16,7 @@ async def is_valid_and_accessible(url: str) -> bool:
             response = await client.get(url, headers=headers, timeout=10.0)
             response.raise_for_status()
             return response.status_code == 200
-    except (httpx.RequestError, httpx.HTTPStatusError):
+    except Exception:
         return False
 
 
@@ -28,8 +28,11 @@ def get_link(text: str) -> str | None:
         return None
 
 
-def get_valid_url(url: str, fallback_url: str) -> str:
-    """Return the provided URL if valid and accessible, otherwise return the fallback URL."""
+async def get_valid_url(url: str, fallback_url: str) -> str:
+    """Return the provided URL if valid and accessible, otherwise return the fallback URL.
+
+    This function is async because it performs an async network check.
+    """
     if not url:
         return fallback_url
-    return url if is_valid_and_accessible(url) else fallback_url
+    return url if await is_valid_and_accessible(url) else fallback_url

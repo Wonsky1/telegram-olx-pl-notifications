@@ -1,0 +1,15 @@
+[run]
+omit =
+    */tests/*
+    */test_*.py
+    */__init__.py
+    */schemas/models.py
+    *.ipynb
+    scripts/*
+
+branch = True
+
+[report]
+fail_under = 80
+
+show_missing = True
