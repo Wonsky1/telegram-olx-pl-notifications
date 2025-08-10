@@ -8,5 +8,3 @@ redis
 httpx
 
 psycopg2-binary
-
-pytest
