@@ -1,10 +1,6 @@
 # Prioritized Improvements & Bugs
 
 Below is the recommended order for tackling improvements and bug fixes. Each item is listed by priority (highest first):
-3. Add automated tests
-   Enables safe refactoring and reliable deployments.
-4. Introduce a staging flow
-   Allows safe validation before production deploys.
 5. Add autodeploy (CI/CD)
    Automates releases once tests and staging are in place.
 6. Make custom prompts configurable
