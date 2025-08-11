@@ -7,3 +7,7 @@ venv
 dev.env
 README.md
 tests
+server
+scripts
+stg
+prod

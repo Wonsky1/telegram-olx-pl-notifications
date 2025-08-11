@@ -1,0 +1,44 @@
+name: Build & Push PROD
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/topn-telegram
+
+jobs:
+  build-and-push-prod:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & Push PROD image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:prod
+          build-args: |
+            BOT_TOKEN=${{ secrets.PROD_BOT_TOKEN }}
+            CHAT_IDS=${{ secrets.PROD_CHAT_IDS }}
+            REDIS_HOST=${{ secrets.PROD_REDIS_HOST }}
+            REDIS_PORT=${{ secrets.PROD_REDIS_PORT }}
+            TOPN_DB_BASE_URL=${{ secrets.PROD_TOPN_DB_BASE_URL }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
