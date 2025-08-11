@@ -1,0 +1,44 @@
+name: Build & Push STG
+
+on:
+  push:
+    branches:
+      - stage
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/topn-telegram
+
+jobs:
+  build-and-push-stg:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & Push STG image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:stg
+          build-args: |
+            BOT_TOKEN=${{ secrets.STG_BOT_TOKEN }}
+            CHAT_IDS=${{ secrets.STG_CHAT_IDS }}
+            REDIS_HOST=${{ secrets.STG_REDIS_HOST }}
+            REDIS_PORT=${{ secrets.STG_REDIS_PORT }}
+            TOPN_DB_BASE_URL=${{ secrets.STG_TOPN_DB_BASE_URL }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

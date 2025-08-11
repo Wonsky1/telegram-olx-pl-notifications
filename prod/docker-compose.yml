@@ -2,8 +2,6 @@ services:
   db:
     image: wonsky/topn-db:prod
     restart: unless-stopped
-    env_file:
-      - db_service.env
     depends_on:
       postgres:
         condition: service_healthy
@@ -15,32 +13,32 @@ services:
       timeout: 10s
       retries: 5
       start_period: 10s
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
     ports:
-      - ${DB_SERVICE_PORT:-8000}:8000
+      - ${DB_SERVICE_PORT:-11}:8000
 
   telegram:
     image: wonsky/topn-telegram:prod
     restart: unless-stopped
-    env_file:
-      - telegram.env
     depends_on:
       db:
         condition: service_healthy
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
 
   worker:
     image: wonsky/topn-worker:prod
     restart: unless-stopped
-    env_file:
-      - worker.env
     depends_on:
       db:
         condition: service_healthy
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
 
   postgres:
     image: postgres:16
     restart: unless-stopped
-    env_file:
-      - postgres.env
     environment:
       POSTGRES_USER: myuser
       POSTGRES_PASSWORD: mypassword
@@ -48,7 +46,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - ${DB_SERVICE_PORT:-5001}:5432
+      - ${DB_SERVICE_PORT:-12}:5432
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U myuser -d mydatabase"]
       interval: 10s
