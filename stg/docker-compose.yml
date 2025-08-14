@@ -1,6 +1,6 @@
 services:
   db:
-    image: wonsky/topn-db:stg
+    image: ghcr.io/wonsky1/topn-db:stg
     restart: unless-stopped
     container_name: topn-db-stg
     depends_on:
@@ -20,7 +20,7 @@ services:
       - ${DB_SERVICE_PORT:-1}:8000
 
   telegram:
-    image: wonsky/topn-telegram:stg
+    image: ghcr.io/wonsky1/topn-telegram:stg
     restart: unless-stopped
     container_name: topn-telegram-stg
     depends_on:
@@ -30,7 +30,7 @@ services:
       - com.centurylinklabs.watchtower.enable=true
 
   worker:
-    image: wonsky/topn-worker:stg
+    image: ghcr.io/wonsky1/topn-worker:stg
     restart: unless-stopped
     container_name: topn-worker-stg
     depends_on:

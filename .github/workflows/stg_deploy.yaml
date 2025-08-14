@@ -11,7 +11,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: wonsky1/topn-telegram
+  IMAGE_NAME: topn-telegram
   USERNAME: wonsky1
 
 jobs:
@@ -40,7 +40,7 @@ jobs:
           context: .
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.USERNAME }}/topn-telegram:stg
+            ${{ env.REGISTRY }}/${{ env.USERNAME }}/${{ env.IMAGE_NAME }}:stg
           build-args: |
             BOT_TOKEN=${{ secrets.STG_BOT_TOKEN }}
             CHAT_IDS=${{ secrets.STG_CHAT_IDS }}
