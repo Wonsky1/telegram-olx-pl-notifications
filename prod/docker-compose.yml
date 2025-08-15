@@ -1,14 +1,15 @@
 services:
   db:
-    image: wonsky/topn-db:prod
+    image: ghcr.io/wonsky1/topn-db:prod
     restart: unless-stopped
-    env_file:
-      - db_service.env
+    container_name: topn-db-prod
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://0.0.0.0:8000/health')"]
       interval: 120s
@@ -16,31 +17,32 @@ services:
       retries: 5
       start_period: 10s
     ports:
-      - ${DB_SERVICE_PORT:-8000}:8000
+      - ${DB_SERVICE_PORT:-11}:8000
 
   telegram:
-    image: wonsky/topn-telegram:prod
+    image: ghcr.io/wonsky1/topn-telegram:prod
     restart: unless-stopped
-    env_file:
-      - telegram.env
+    container_name: topn-telegram-prod
     depends_on:
       db:
         condition: service_healthy
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
 
   worker:
-    image: wonsky/topn-worker:prod
+    image: ghcr.io/wonsky1/topn-worker:prod
     restart: unless-stopped
-    env_file:
-      - worker.env
+    container_name: topn-worker-prod
     depends_on:
       db:
         condition: service_healthy
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
 
   postgres:
     image: postgres:16
     restart: unless-stopped
-    env_file:
-      - postgres.env
+    container_name: topn-postgres-prod
     environment:
       POSTGRES_USER: myuser
       POSTGRES_PASSWORD: mypassword
@@ -48,7 +50,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - ${DB_SERVICE_PORT:-5001}:5432
+      - ${DB_SERVICE_PORT:-12}:5432
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U myuser -d mydatabase"]
       interval: 10s
@@ -58,6 +60,7 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    container_name: topn-redis-prod
     volumes:
       - redis_data:/data
     healthcheck:
