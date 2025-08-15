@@ -9,4 +9,4 @@ services:
     command:
       --interval 300
       --cleanup
-      --enable-labels
+      --label-enable
