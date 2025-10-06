@@ -71,6 +71,7 @@ class Notifier:  # noqa: D101 – simple name
 
             for item in reversed(items_to_send):
                 text = _format_item_text(item)
+                logger.info(f"Formatted message text (len={len(text)}): {text}")
                 # Handle both dict and object access patterns for image_url
                 image_url = (
                     item.get("image_url")
