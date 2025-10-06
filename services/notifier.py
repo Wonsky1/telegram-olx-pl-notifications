@@ -98,6 +98,36 @@ class Notifier:  # noqa: D101 – simple name
 # ---------------------------- Formatting helpers -----------------------------
 
 
+def _escape_markdown(text: str) -> str:
+    """Escape special Markdown characters for Telegram."""
+    if not text:
+        return text
+    # Escape special Markdown characters
+    special_chars = [
+        "_",
+        "*",
+        "[",
+        "]",
+        "(",
+        ")",
+        "~",
+        "`",
+        ">",
+        "#",
+        "+",
+        "-",
+        "=",
+        "|",
+        "{",
+        "}",
+        ".",
+        "!",
+    ]
+    for char in special_chars:
+        text = text.replace(char, f"\\{char}")
+    return text
+
+
 def _format_item_text(item) -> str:  # type: ignore[annotation-unreachable]
     """Return Markdown-formatted text for *item* compatible with Telegram."""
     # Handle both dict and object access patterns
@@ -152,22 +182,32 @@ def _format_item_text(item) -> str:  # type: ignore[annotation-unreachable]
         item.get("source") if isinstance(item, dict) else getattr(item, "source", None)
     )
 
+    # Escape all user-provided content
+    title_escaped = _escape_markdown(title)
+    price_escaped = _escape_markdown(str(price))
+    location_escaped = _escape_markdown(str(location))
+    created_at_escaped = _escape_markdown(str(created_at_pretty))
+
     text = (
-        f"📦 *{title}*\n\n"
-        f"💰 *Price:* {price}\n"
-        f"📍 *Location:* {location}\n"
-        f"🕒 *Posted:* {created_at_pretty}\n"
+        f"📦 *{title_escaped}*\n\n"
+        f"💰 *Price:* {price_escaped}\n"
+        f"📍 *Location:* {location_escaped}\n"
+        f"🕒 *Posted:* {created_at_escaped}\n"
     )
     # Optional extras
-    if price := extra.get("price_info"):
-        text += f"💵 *{price}* PLN\n"
+    if price_info := extra.get("price_info"):
+        price_info_escaped = _escape_markdown(str(price_info))
+        text += f"💵 *{price_info_escaped}* PLN\n"
     if (deposit := extra.get("deposit_info")) and deposit != "Deposit: 0":
-        text += f"🔐 *{deposit}* PLN\n"
+        deposit_escaped = _escape_markdown(str(deposit))
+        text += f"🔐 *{deposit_escaped}* PLN\n"
     if animals := extra.get("animals_info"):
-        text += f"🐾 *{animals}*\n"
+        animals_escaped = _escape_markdown(str(animals))
+        text += f"🐾 *{animals_escaped}*\n"
     if rent := extra.get("rent_info"):
-        text += f"💳 *{rent}* PLN\n"
+        rent_escaped = _escape_markdown(str(rent))
+        text += f"💳 *{rent_escaped}* PLN\n"
 
-    platform_name = source if source else "Unknown source"
-    text += f"🔗 [View on {platform_name}]({item_url})"
+    platform_name_escaped = _escape_markdown(source if source else "Unknown source")
+    text += f"🔗 [View on {platform_name_escaped}]({item_url})"
     return text
