@@ -2,12 +2,9 @@
 
 from logging import getLogger
 
-from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = getLogger(__name__)
-
-load_dotenv("dev.env")
 
 
 class Settings(BaseSettings):

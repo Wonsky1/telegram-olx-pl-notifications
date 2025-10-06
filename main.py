@@ -1,6 +1,7 @@
 # telegram_service.py
 import asyncio
 import logging
+from logging.handlers import TimedRotatingFileHandler
 
 import redis.asyncio as redis
 from aiogram import Bot, Dispatcher, types
@@ -17,12 +18,23 @@ from core.dependencies import get_monitoring_service, get_repository
 # Dependency injection – business & infrastructure layers
 from services.notifier import Notifier
 
+file_handler = TimedRotatingFileHandler(
+    filename="bot.log",
+    when="midnight",  # Rotate at midnight
+    interval=1,  # Every day
+    backupCount=30,  # Keep 30 days (approximately 1 month)
+    encoding="utf-8",
+)
+file_handler.setFormatter(
+    logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler(),
-        # logging.FileHandler("bot.log")
+        file_handler,
     ],
 )
 logger = logging.getLogger(__name__)
