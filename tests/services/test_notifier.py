@@ -3,7 +3,64 @@ import unittest
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from services.notifier import Notifier, _format_item_text
+from services.notifier import Notifier, _escape_markdown, _format_item_text
+
+
+class TestEscapeMarkdown(unittest.TestCase):
+    """Test the _escape_markdown helper function."""
+
+    def test_escape_special_characters(self):
+        """Test that all special Markdown characters are escaped."""
+        input_text = "Test *bold* _italic_ [link](url) `code` ~strike~"
+        result = _escape_markdown(input_text)
+        self.assertIn(r"\*bold\*", result)
+        self.assertIn(r"\_italic\_", result)
+        self.assertIn(r"\[link\]\(url\)", result)
+        self.assertIn(r"\`code\`", result)
+        self.assertIn(r"\~strike\~", result)
+
+    def test_escape_all_special_chars(self):
+        """Test escaping of all special characters."""
+        special = "_*[]()~`>#+-=|{}.!"
+        result = _escape_markdown(special)
+        # Each character should be prefixed with a backslash
+        for char in special:
+            self.assertIn(f"\\{char}", result)
+
+    def test_escape_empty_string(self):
+        """Test that empty string is handled correctly."""
+        result = _escape_markdown("")
+        self.assertEqual(result, "")
+
+    def test_escape_none(self):
+        """Test that None is handled correctly."""
+        result = _escape_markdown(None)
+        self.assertIsNone(result)
+
+    def test_escape_regular_text(self):
+        """Test that regular text without special chars is unchanged."""
+        text = "This is normal text"
+        result = _escape_markdown(text)
+        self.assertEqual(result, text)
+
+    def test_escape_real_world_title(self):
+        """Test escaping a real-world title with special characters."""
+        title = "2-room flat (50m²) - Modern & Cozy!"
+        result = _escape_markdown(title)
+        # Should escape parentheses, hyphen, and exclamation
+        self.assertIn(r"\(", result)
+        self.assertIn(r"\)", result)
+        self.assertIn(r"\-", result)
+        self.assertIn("&", result)  # & doesn't need escaping, should remain
+        self.assertIn(r"\!", result)
+
+    def test_escape_price_with_currency(self):
+        """Test escaping prices with special formatting."""
+        price = "1,500-2,000 PLN"
+        result = _escape_markdown(price)
+        # Hyphen should be escaped, comma doesn't need escaping
+        self.assertIn(r"\-", result)
+        self.assertIn(",", result)  # Comma should remain unescaped
 
 
 class TestNotifier(IsolatedAsyncioTestCase):
@@ -24,6 +81,31 @@ class TestNotifier(IsolatedAsyncioTestCase):
         self.assertIn("Pets: Allowed", text)
         self.assertIn("Additional rent:", text)
         self.assertIn("View on olx", text)
+
+    async def test_format_item_text_with_special_characters(self):
+        """Test that special Markdown characters in item data are properly escaped."""
+        item_dict = {
+            "title": "2-room flat (50m²) - *New* & Cozy!",
+            "price": "1,500-2,000",
+            "location": "Warsaw [Center]",
+            "created_at_pretty": "today (2h ago)",
+            "item_url": "http://example.com",
+            "description": "price: 1,800\ndeposit: 500",
+            "source": "OLX.pl",
+        }
+        text = _format_item_text(item_dict)
+        # Should contain escaped special characters
+        self.assertIn(r"\(", text)
+        self.assertIn(r"\)", text)
+        self.assertIn(r"\*", text)
+        self.assertIn(r"\[", text)
+        self.assertIn(r"\]", text)
+        self.assertIn(r"\-", text)
+        self.assertIn(r"\!", text)
+        self.assertIn(r"\.", text)
+        # Should not break the Markdown structure
+        self.assertIn("📦 *", text)  # Emoji and bold marker for title
+        self.assertIn("💰 *Price:*", text)  # Bold markers for labels
 
         # Object-like access
         class Obj:
