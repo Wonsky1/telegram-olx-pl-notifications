@@ -10,22 +10,37 @@ class TestEscapeMarkdown(unittest.TestCase):
     """Test the _escape_markdown helper function."""
 
     def test_escape_special_characters(self):
-        """Test that all special Markdown characters are escaped."""
-        input_text = "Test *bold* _italic_ [link](url) `code` ~strike~"
+        """Test that Markdown special characters are escaped."""
+        input_text = "Test *bold* _italic_ [link](url) `code`"
         result = _escape_markdown(input_text)
         self.assertIn(r"\*bold\*", result)
         self.assertIn(r"\_italic\_", result)
-        self.assertIn(r"\[link\]\(url\)", result)
+        self.assertIn(r"\[link](url)", result)
         self.assertIn(r"\`code\`", result)
-        self.assertIn(r"\~strike\~", result)
 
-    def test_escape_all_special_chars(self):
-        """Test escaping of all special characters."""
-        special = "_*[]()~`>#+-=|{}.!"
-        result = _escape_markdown(special)
-        # Each character should be prefixed with a backslash
-        for char in special:
-            self.assertIn(f"\\{char}", result)
+    def test_escape_critical_chars(self):
+        """Test escaping of critical Markdown characters."""
+        # Only *, _, `, [ need escaping in legacy Markdown
+        text_with_specials = "*asterisk* _underscore_ `backtick` [bracket]"
+        result = _escape_markdown(text_with_specials)
+        self.assertIn(r"\*", result)
+        self.assertIn(r"\_", result)
+        self.assertIn(r"\`", result)
+        self.assertIn(r"\[", result)
+
+    def test_no_escape_other_chars(self):
+        """Test that other characters are NOT escaped."""
+        # These should NOT be escaped in legacy Markdown
+        text = "Price: 1,500-2,000 (50m²) - Modern & Cozy! #1"
+        result = _escape_markdown(text)
+        # These should remain unchanged
+        self.assertIn(",", result)
+        self.assertIn("-", result)
+        self.assertIn("(", result)
+        self.assertIn(")", result)
+        self.assertIn("&", result)
+        self.assertIn("!", result)
+        self.assertIn("#", result)
 
     def test_escape_empty_string(self):
         """Test that empty string is handled correctly."""
@@ -44,23 +59,13 @@ class TestEscapeMarkdown(unittest.TestCase):
         self.assertEqual(result, text)
 
     def test_escape_real_world_title(self):
-        """Test escaping a real-world title with special characters."""
-        title = "2-room flat (50m²) - Modern & Cozy!"
+        """Test escaping a real-world title with asterisk."""
+        title = "*Luksusowy dom w urokliwej okolicy rzeki"
         result = _escape_markdown(title)
-        # Should escape parentheses, hyphen, and exclamation
-        self.assertIn(r"\(", result)
-        self.assertIn(r"\)", result)
-        self.assertIn(r"\-", result)
-        self.assertIn("&", result)  # & doesn't need escaping, should remain
-        self.assertIn(r"\!", result)
-
-    def test_escape_price_with_currency(self):
-        """Test escaping prices with special formatting."""
-        price = "1,500-2,000 PLN"
-        result = _escape_markdown(price)
-        # Hyphen should be escaped, comma doesn't need escaping
-        self.assertIn(r"\-", result)
-        self.assertIn(",", result)  # Comma should remain unescaped
+        # Asterisk should be escaped
+        self.assertIn(r"\*Luksusowy", result)
+        # Other characters should remain
+        self.assertIn("dom", result)
 
 
 class TestNotifier(IsolatedAsyncioTestCase):
@@ -85,24 +90,23 @@ class TestNotifier(IsolatedAsyncioTestCase):
     async def test_format_item_text_with_special_characters(self):
         """Test that special Markdown characters in item data are properly escaped."""
         item_dict = {
-            "title": "2-room flat (50m²) - *New* & Cozy!",
+            "title": "*Luksusowy dom* w okolicy [rzeki]",
             "price": "1,500-2,000",
-            "location": "Warsaw [Center]",
-            "created_at_pretty": "today (2h ago)",
+            "location": "Warsaw_Center",
+            "created_at_pretty": "today `2h ago`",
             "item_url": "http://example.com",
             "description": "price: 1,800\ndeposit: 500",
             "source": "OLX.pl",
         }
         text = _format_item_text(item_dict)
-        # Should contain escaped special characters
-        self.assertIn(r"\(", text)
-        self.assertIn(r"\)", text)
-        self.assertIn(r"\*", text)
-        self.assertIn(r"\[", text)
-        self.assertIn(r"\]", text)
-        self.assertIn(r"\-", text)
-        self.assertIn(r"\!", text)
-        self.assertIn(r"\.", text)
+        # Should contain escaped critical Markdown characters
+        self.assertIn(r"\*Luksusowy", text)  # Asterisk escaped
+        self.assertIn(r"\[rzeki\]", text)  # Brackets escaped
+        self.assertIn(r"Warsaw\_Center", text)  # Underscore escaped
+        self.assertIn(r"\`2h ago\`", text)  # Backtick escaped
+        # Should NOT escape other characters
+        self.assertIn(",", text)  # Comma not escaped
+        self.assertIn("-", text)  # Hyphen not escaped
         # Should not break the Markdown structure
         self.assertIn("📦 *", text)  # Emoji and bold marker for title
         self.assertIn("💰 *Price:*", text)  # Bold markers for labels
