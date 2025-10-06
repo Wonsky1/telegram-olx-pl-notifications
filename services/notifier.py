@@ -106,7 +106,7 @@ def _escape_markdown(text: str) -> str:
     - * (bold)
     - _ (italic)
     - ` (code)
-    - [ (link start)
+    - [ ] (links)
     """
     if not text:
         return text
@@ -115,6 +115,7 @@ def _escape_markdown(text: str) -> str:
     text = text.replace("_", "\\_")
     text = text.replace("`", "\\`")
     text = text.replace("[", "\\[")
+    text = text.replace("]", "\\]")
     return text
 
 
@@ -172,32 +173,26 @@ def _format_item_text(item) -> str:  # type: ignore[annotation-unreachable]
         item.get("source") if isinstance(item, dict) else getattr(item, "source", None)
     )
 
-    # Escape all user-provided content
+    # Escape only user-provided content that might contain special chars
     title_escaped = _escape_markdown(title)
-    price_escaped = _escape_markdown(str(price))
     location_escaped = _escape_markdown(str(location))
-    created_at_escaped = _escape_markdown(str(created_at_pretty))
 
     text = (
         f"📦 *{title_escaped}*\n\n"
-        f"💰 *Price:* {price_escaped}\n"
+        f"💰 *Price:* {price}\n"
         f"📍 *Location:* {location_escaped}\n"
-        f"🕒 *Posted:* {created_at_escaped}\n"
+        f"🕒 *Posted:* {created_at_pretty}\n"
     )
     # Optional extras
     if price_info := extra.get("price_info"):
-        price_info_escaped = _escape_markdown(str(price_info))
-        text += f"💵 *{price_info_escaped}* PLN\n"
+        text += f"💵 *{price_info}* PLN\n"
     if (deposit := extra.get("deposit_info")) and deposit != "Deposit: 0":
-        deposit_escaped = _escape_markdown(str(deposit))
-        text += f"🔐 *{deposit_escaped}* PLN\n"
+        text += f"🔐 *{deposit}* PLN\n"
     if animals := extra.get("animals_info"):
-        animals_escaped = _escape_markdown(str(animals))
-        text += f"🐾 *{animals_escaped}*\n"
+        text += f"🐾 *{animals}*\n"
     if rent := extra.get("rent_info"):
-        rent_escaped = _escape_markdown(str(rent))
-        text += f"💳 *{rent_escaped}* PLN\n"
+        text += f"💳 *{rent}* PLN\n"
 
-    platform_name_escaped = _escape_markdown(source if source else "Unknown source")
-    text += f"🔗 [View on {platform_name_escaped}]({item_url})"
+    platform_name = source if source else "Unknown source"
+    text += f"🔗 [View on {platform_name}]({item_url})"
     return text

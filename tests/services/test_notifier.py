@@ -15,18 +15,19 @@ class TestEscapeMarkdown(unittest.TestCase):
         result = _escape_markdown(input_text)
         self.assertIn(r"\*bold\*", result)
         self.assertIn(r"\_italic\_", result)
-        self.assertIn(r"\[link](url)", result)
+        self.assertIn(r"\[link\](url)", result)
         self.assertIn(r"\`code\`", result)
 
     def test_escape_critical_chars(self):
         """Test escaping of critical Markdown characters."""
-        # Only *, _, `, [ need escaping in legacy Markdown
+        # Only *, _, `, [, ] need escaping in legacy Markdown
         text_with_specials = "*asterisk* _underscore_ `backtick` [bracket]"
         result = _escape_markdown(text_with_specials)
         self.assertIn(r"\*", result)
         self.assertIn(r"\_", result)
         self.assertIn(r"\`", result)
         self.assertIn(r"\[", result)
+        self.assertIn(r"\]", result)
 
     def test_no_escape_other_chars(self):
         """Test that other characters are NOT escaped."""
@@ -93,17 +94,18 @@ class TestNotifier(IsolatedAsyncioTestCase):
             "title": "*Luksusowy dom* w okolicy [rzeki]",
             "price": "1,500-2,000",
             "location": "Warsaw_Center",
-            "created_at_pretty": "today `2h ago`",
+            "created_at_pretty": "today 2h ago",  # No backticks - not escaped
             "item_url": "http://example.com",
             "description": "price: 1,800\ndeposit: 500",
             "source": "OLX.pl",
         }
         text = _format_item_text(item_dict)
-        # Should contain escaped critical Markdown characters
-        self.assertIn(r"\*Luksusowy", text)  # Asterisk escaped
-        self.assertIn(r"\[rzeki\]", text)  # Brackets escaped
-        self.assertIn(r"Warsaw\_Center", text)  # Underscore escaped
-        self.assertIn(r"\`2h ago\`", text)  # Backtick escaped
+        # Should contain escaped critical Markdown characters in title and location
+        self.assertIn(r"\*Luksusowy", text)  # Asterisk escaped in title
+        self.assertIn(r"\[rzeki\]", text)  # Brackets escaped in title
+        self.assertIn(r"Warsaw\_Center", text)  # Underscore escaped in location
+        # created_at_pretty is NOT escaped
+        self.assertIn("today 2h ago", text)
         # Should NOT escape other characters
         self.assertIn(",", text)  # Comma not escaped
         self.assertIn("-", text)  # Hyphen not escaped
