@@ -3,70 +3,101 @@ import unittest
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from services.notifier import Notifier, _escape_markdown, _format_item_text
+from services.notifier import (
+    Notifier,
+    _escape_markdown_v2,
+    _format_item_text,
+    bold_telegram_md,
+)
 
 
-class TestEscapeMarkdown(unittest.TestCase):
-    """Test the _escape_markdown helper function."""
+class TestEscapeMarkdownV2(unittest.TestCase):
+    """Test the _escape_markdown_v2 helper function."""
 
     def test_escape_special_characters(self):
-        """Test that Markdown special characters are escaped."""
+        """Test that MarkdownV2 special characters are escaped."""
         input_text = "Test *bold* _italic_ [link](url) `code`"
-        result = _escape_markdown(input_text)
+        result = _escape_markdown_v2(input_text)
         self.assertIn(r"\*bold\*", result)
         self.assertIn(r"\_italic\_", result)
-        self.assertIn(r"\[link\](url)", result)
+        self.assertIn(r"\[link\]\(url\)", result)
         self.assertIn(r"\`code\`", result)
 
-    def test_escape_critical_chars(self):
-        """Test escaping of critical Markdown characters."""
-        # Only *, _, `, [, ] need escaping in legacy Markdown
-        text_with_specials = "*asterisk* _underscore_ `backtick` [bracket]"
-        result = _escape_markdown(text_with_specials)
-        self.assertIn(r"\*", result)
-        self.assertIn(r"\_", result)
-        self.assertIn(r"\`", result)
-        self.assertIn(r"\[", result)
-        self.assertIn(r"\]", result)
+    def test_escape_all_special_chars(self):
+        """Test escaping all MarkdownV2 special characters."""
+        text = "_*[]()~`>#+-=|{}.!"
+        result = _escape_markdown_v2(text)
+        for char in text:
+            self.assertIn(f"\\{char}", result)
 
-    def test_no_escape_other_chars(self):
-        """Test that other characters are NOT escaped."""
-        # These should NOT be escaped in legacy Markdown
+    def test_escape_mixed_text(self):
+        """Test escaping text with multiple special chars."""
         text = "Price: 1,500-2,000 (50m²) - Modern & Cozy! #1"
-        result = _escape_markdown(text)
-        # These should remain unchanged
-        self.assertIn(",", result)
-        self.assertIn("-", result)
-        self.assertIn("(", result)
-        self.assertIn(")", result)
-        self.assertIn("&", result)
-        self.assertIn("!", result)
-        self.assertIn("#", result)
+        result = _escape_markdown_v2(text)
+        # These chars should be escaped in MarkdownV2
+        self.assertIn(r"\-", result)  # hyphen
+        self.assertIn(r"\(", result)  # parenthesis
+        self.assertIn(r"\)", result)
+        self.assertIn(r"\!", result)  # exclamation
+        self.assertIn(r"\#", result)  # hash
 
     def test_escape_empty_string(self):
         """Test that empty string is handled correctly."""
-        result = _escape_markdown("")
+        result = _escape_markdown_v2("")
         self.assertEqual(result, "")
 
     def test_escape_none(self):
         """Test that None is handled correctly."""
-        result = _escape_markdown(None)
+        result = _escape_markdown_v2(None)
         self.assertIsNone(result)
 
     def test_escape_regular_text(self):
-        """Test that regular text without special chars is unchanged."""
+        """Test that text without special chars is unchanged."""
         text = "This is normal text"
-        result = _escape_markdown(text)
+        result = _escape_markdown_v2(text)
         self.assertEqual(result, text)
 
     def test_escape_real_world_title(self):
         """Test escaping a real-world title with asterisk."""
         title = "*Luksusowy dom w urokliwej okolicy rzeki"
-        result = _escape_markdown(title)
+        result = _escape_markdown_v2(title)
         # Asterisk should be escaped
         self.assertIn(r"\*Luksusowy", result)
         # Other characters should remain
         self.assertIn("dom", result)
+
+
+class TestBoldTelegramMd(unittest.TestCase):
+    """Test the bold_telegram_md helper function."""
+
+    def test_bold_simple_text(self):
+        """Test bolding simple text."""
+        result = bold_telegram_md("Hello World")
+        self.assertEqual(result, "*Hello World*")
+
+    def test_bold_text_with_asterisk(self):
+        """Test bolding text that contains asterisks."""
+        result = bold_telegram_md("*Luksusowy dom")
+        # Asterisk is escaped, then wrapped in bold
+        self.assertEqual(result, r"*\*Luksusowy dom*")
+
+    def test_bold_text_with_multiple_asterisks(self):
+        """Test bolding text with asterisks in middle and edges."""
+        result = bold_telegram_md("*Price: 1000* PLN*")
+        # Edge asterisks stripped, middle one escaped
+        self.assertIn("Price:", result)
+        self.assertTrue(result.startswith("*"))
+        self.assertTrue(result.endswith("*"))
+
+    def test_bold_empty_string(self):
+        """Test bolding empty string."""
+        result = bold_telegram_md("")
+        self.assertEqual(result, "")
+
+    def test_bold_none(self):
+        """Test bolding None."""
+        result = bold_telegram_md(None)
+        self.assertEqual(result, "")
 
 
 class TestNotifier(IsolatedAsyncioTestCase):
@@ -100,18 +131,15 @@ class TestNotifier(IsolatedAsyncioTestCase):
             "source": "OLX.pl",
         }
         text = _format_item_text(item_dict)
-        # Should contain escaped critical Markdown characters in title and location
+        # Title should be wrapped in bold with escaped content
+        self.assertIn("*", text)  # Bold markers present
         self.assertIn(r"\*Luksusowy", text)  # Asterisk escaped in title
         self.assertIn(r"\[rzeki\]", text)  # Brackets escaped in title
-        self.assertIn(r"Warsaw\_Center", text)  # Underscore escaped in location
-        # created_at_pretty is NOT escaped
-        self.assertIn("today 2h ago", text)
-        # Should NOT escape other characters
-        self.assertIn(",", text)  # Comma not escaped
-        self.assertIn("-", text)  # Hyphen not escaped
-        # Should not break the Markdown structure
-        self.assertIn("📦 *", text)  # Emoji and bold marker for title
-        self.assertIn("💰 *Price:*", text)  # Bold markers for labels
+        # Location underscore is escaped
+        self.assertIn(r"Warsaw\_Center", text)
+        # MarkdownV2 structure maintained
+        self.assertIn("📦 *", text)
+        self.assertIn("💰 *Price*:", text)  # Bold Price, colon outside
 
         # Object-like access
         class Obj:
