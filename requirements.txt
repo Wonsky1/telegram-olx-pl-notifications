@@ -1,5 +1,5 @@
-aiogram==3.21.0
-pydantic-settings==2.10.
+aiogram==3.22.0
+pydantic-settings==2.11.0
 validators==0.35.0
 pytz==2025.2
 redis==6.4.0
