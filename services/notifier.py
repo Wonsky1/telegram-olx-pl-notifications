@@ -99,32 +99,22 @@ class Notifier:  # noqa: D101 – simple name
 
 
 def _escape_markdown(text: str) -> str:
-    """Escape special Markdown characters for Telegram."""
+    """Escape special Markdown characters for Telegram legacy Markdown mode.
+
+    In legacy Markdown, only these characters need escaping when they appear
+    in user content (not in our formatting):
+    - * (bold)
+    - _ (italic)
+    - ` (code)
+    - [ (link start)
+    """
     if not text:
         return text
-    # Escape special Markdown characters
-    special_chars = [
-        "_",
-        "*",
-        "[",
-        "]",
-        "(",
-        ")",
-        "~",
-        "`",
-        ">",
-        "#",
-        "+",
-        "-",
-        "=",
-        "|",
-        "{",
-        "}",
-        ".",
-        "!",
-    ]
-    for char in special_chars:
-        text = text.replace(char, f"\\{char}")
+    # Only escape characters that have special meaning in Telegram's legacy Markdown
+    text = text.replace("*", "\\*")
+    text = text.replace("_", "\\_")
+    text = text.replace("`", "\\`")
+    text = text.replace("[", "\\[")
     return text
 
 
