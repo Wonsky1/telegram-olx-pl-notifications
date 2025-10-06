@@ -177,12 +177,13 @@ def _format_item_text(item) -> str:  # type: ignore[annotation-unreachable]
     # Escape only user-provided content that might contain special chars
     title_escaped = _escape_markdown(title)
     location_escaped = _escape_markdown(str(location))
+    created_at_escaped = _escape_markdown(str(created_at_pretty))
 
     text = (
         f"📦 *{title_escaped}*\n\n"
         f"💰 *Price:* {price}\n"
         f"📍 *Location:* {location_escaped}\n"
-        f"🕒 *Posted:* {created_at_pretty}\n"
+        f"🕒 *Posted:* {created_at_escaped}\n"
     )
     # Optional extras
     if price_info := extra.get("price_info"):
